@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import { SpeedReadLogo } from "@/components/ui/SpeedReadLogo";
 
 export default function Navbar() {
+  const router = useRouter();
+  const { isAuthenticated } = useAuthSession();
   const [open, setOpen] = useState(false);
 
   return (
