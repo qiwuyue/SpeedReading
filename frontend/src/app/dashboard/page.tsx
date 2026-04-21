@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { useAuthSession } from '@/lib/supabase/use-auth-session';
+import { showToast } from '@/lib/toast-store';
 
 const MOCK_STATS = [
   { label: 'Total sessions', value: '18', detail: '+4 this week' },
@@ -47,7 +48,6 @@ export default function DashboardPage() {
   const [displayNameInput, setDisplayNameInput] = useState('');
   const [displayNameModalOpen, setDisplayNameModalOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const [profileMessage, setProfileMessage] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
 
   const displayName = profile?.display_name?.trim() ?? '';
@@ -64,7 +64,14 @@ export default function DashboardPage() {
   }, [profile?.display_name]);
 
   useEffect(() => {
-    if (profileError) setAuthError(profileError);
+    if (!profileError) return;
+
+    setAuthError(profileError);
+    showToast({
+      message: profileError,
+      title: 'Profile unavailable',
+      variant: 'error',
+    });
   }, [profileError]);
 
   const handleLogout = async () => {
@@ -91,20 +98,25 @@ export default function DashboardPage() {
 
     const nextDisplayName = displayNameInput.trim();
     setAuthError('');
-    setProfileMessage('');
 
     if (!user) {
-      setAuthError('You need to be logged in to update your profile.');
+      const message = 'You need to be logged in to update your profile.';
+      setAuthError(message);
+      showToast({ message, title: 'Profile update failed', variant: 'error' });
       return;
     }
 
     if (!nextDisplayName) {
-      setAuthError('Display name cannot be empty.');
+      const message = 'Display name cannot be empty.';
+      setAuthError(message);
+      showToast({ message, title: 'Profile update failed', variant: 'error' });
       return;
     }
 
     if (nextDisplayName.length > 100) {
-      setAuthError('Display name must be 100 characters or fewer.');
+      const message = 'Display name must be 100 characters or fewer.';
+      setAuthError(message);
+      showToast({ message, title: 'Profile update failed', variant: 'error' });
       return;
     }
 
@@ -113,14 +125,20 @@ export default function DashboardPage() {
     try {
       await updateDisplayName(nextDisplayName);
       setDisplayNameInput(nextDisplayName);
-      setProfileMessage('Display name updated.');
       setDisplayNameModalOpen(false);
+      showToast({
+        message: 'Display name updated.',
+        title: 'Profile saved',
+        variant: 'success',
+      });
     } catch (error) {
-      setAuthError(
+      const message =
         error instanceof Error
           ? error.message
-          : 'Unable to update your display name right now.',
-      );
+          : 'Unable to update your display name right now.';
+
+      setAuthError(message);
+      showToast({ message, title: 'Profile update failed', variant: 'error' });
     } finally {
       setProfileSaving(false);
     }
@@ -206,7 +224,6 @@ export default function DashboardPage() {
                     type="button"
                     onClick={() => {
                       setDisplayNameInput(displayName);
-                      setProfileMessage('');
                       setAuthError('');
                       setDisplayNameModalOpen(true);
                     }}
@@ -232,11 +249,6 @@ export default function DashboardPage() {
                 Keep your next session focused. Your saved preferences are
                 ready whenever you start reading.
               </p>
-              {profileMessage ? (
-                <p className="mt-3 text-sm text-emerald-300">
-                  {profileMessage}
-                </p>
-              ) : null}
               {authError || authSessionError ? (
                 <p className="mt-4 rounded-xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
                   {authError || authSessionError}

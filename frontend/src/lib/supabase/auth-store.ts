@@ -5,6 +5,7 @@ import { create } from 'zustand';
 import { createSupabaseBrowserClient } from './client';
 import {
   getUserProfile,
+  upsertUserProfile,
   updateUserDisplayName,
   type UserProfile,
 } from './users';
@@ -88,12 +89,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     const supabase = createSupabaseBrowserClient();
-    await updateUserDisplayName(supabase, user.id, displayName);
+    if (profile) {
+      await updateUserDisplayName(supabase, user.id, displayName);
+    } else {
+      await upsertUserProfile(supabase, { displayName, user });
+    }
 
     set({
       profile: profile
         ? { ...profile, display_name: displayName }
-        : profile,
+        : {
+            default_wpm: 250,
+            display_name: displayName,
+            email: user.email ?? null,
+            focus_mode: 'highlight',
+            id: user.id,
+          },
       profileError: '',
     });
   },

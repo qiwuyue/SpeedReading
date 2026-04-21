@@ -18,10 +18,10 @@ export async function getUserProfile(supabase: SupabaseClient, userId: string) {
     .from('users')
     .select('id, email, display_name, default_wpm, focus_mode')
     .eq('id', userId)
-    .single();
+    .maybeSingle();
 
   if (error) throw error;
-  return data as UserProfile;
+  return data as UserProfile | null;
 }
 
 export async function upsertUserProfile(
