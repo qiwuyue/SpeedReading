@@ -6,11 +6,6 @@ import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { useAuthSession } from '@/lib/supabase/use-auth-session';
-import {
-  getUserProfile,
-  updateUserDisplayName,
-  type UserProfile,
-} from '@/lib/supabase/users';
 
 const MOCK_STATS = [
   { label: 'Total sessions', value: '18', detail: '+4 this week' },
@@ -42,14 +37,16 @@ export default function DashboardPage() {
     error: authSessionError,
     isAuthenticated,
     isLoading,
+    profile,
+    profileError,
     status,
+    updateDisplayName,
     user,
   } = useAuthSession();
   const [authError, setAuthError] = useState('');
   const [displayNameInput, setDisplayNameInput] = useState('');
   const [displayNameModalOpen, setDisplayNameModalOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileMessage, setProfileMessage] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
 
@@ -63,26 +60,12 @@ export default function DashboardPage() {
   }, [router, status]);
 
   useEffect(() => {
-    if (!user) return;
+    setDisplayNameInput(profile?.display_name ?? '');
+  }, [profile?.display_name]);
 
-    const loadProfile = async () => {
-      try {
-        const supabase = createSupabaseBrowserClient();
-        const nextProfile = await getUserProfile(supabase, user.id);
-
-        setProfile(nextProfile);
-        setDisplayNameInput(nextProfile.display_name ?? '');
-      } catch (error) {
-        setAuthError(
-          error instanceof Error
-            ? error.message
-            : 'Unable to load your profile right now.',
-        );
-      }
-    };
-
-    loadProfile();
-  }, [user]);
+  useEffect(() => {
+    if (profileError) setAuthError(profileError);
+  }, [profileError]);
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -128,13 +111,7 @@ export default function DashboardPage() {
     setProfileSaving(true);
 
     try {
-      const supabase = createSupabaseBrowserClient();
-      await updateUserDisplayName(supabase, user.id, nextDisplayName);
-      setProfile((currentProfile) =>
-        currentProfile
-          ? { ...currentProfile, display_name: nextDisplayName }
-          : currentProfile,
-      );
+      await updateDisplayName(nextDisplayName);
       setDisplayNameInput(nextDisplayName);
       setProfileMessage('Display name updated.');
       setDisplayNameModalOpen(false);
