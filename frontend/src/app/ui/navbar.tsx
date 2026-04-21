@@ -1,10 +1,53 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import AuthModal, { AuthMode } from './auth-modal';
+import { useAuthSession } from '@/lib/supabase/use-auth-session';
 
 export default function Navbar() {
+  const router = useRouter();
+  const { isAuthenticated } = useAuthSession();
   const [open, setOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [scrolled, setScrolled] = useState(false);
+
+  const openAuth = (mode: AuthMode) => {
+    setOpen(false);
+    setAuthMode(mode);
+    setAuthOpen(true);
+  };
+
+  const handleLoginClick = () => {
+    if (isAuthenticated) {
+      router.push('/dashboard');
+      return;
+    }
+
+    openAuth('login');
+  };
+
+  const handleDashboardClick = () => {
+    if (isAuthenticated) {
+      setOpen(false);
+      router.push('/dashboard');
+      return;
+    }
+
+    openAuth('login');
+  };
+
+  const handleSignupClick = () => {
+    if (isAuthenticated) {
+      setOpen(false);
+      router.push('/dashboard');
+      return;
+    }
+
+    openAuth('signup');
+  };
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -31,7 +74,7 @@ export default function Navbar() {
       >
         <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-6 h-16">
           {/* Logo */}
-          <a href="/" className="flex items-center gap-2.5 group">
+          <Link href="/" className="flex items-center gap-2.5 group">
             <div className="relative w-7 h-7 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shrink-0 shadow-lg shadow-amber-900/50 group-hover:shadow-amber-900/80 transition-shadow">
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
                 <path
@@ -45,7 +88,7 @@ export default function Navbar() {
             <span className="font-bold tracking-tight text-white text-[15px]">
               SpeedRead
             </span>
-          </a>
+          </Link>
 
           {/* Desktop nav */}
           <nav className="hidden sm:flex items-center gap-1">
@@ -62,10 +105,25 @@ export default function Navbar() {
 
           {/* Desktop CTAs */}
           <div className="hidden sm:flex items-center gap-3">
-            <button className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-white transition-colors">
+            <button
+              type="button"
+              onClick={handleLoginClick}
+              className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-white transition-colors"
+            >
               Log in
             </button>
-            <button className="px-4 py-2 text-sm font-semibold rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 text-white hover:from-amber-400 hover:to-orange-500 transition-all duration-200 shadow-lg shadow-amber-900/40 hover:shadow-amber-900/60">
+            <button
+              type="button"
+              onClick={handleDashboardClick}
+              className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-white transition-colors"
+            >
+              Dashboard
+            </button>
+            <button
+              type="button"
+              onClick={handleSignupClick}
+              className="px-4 py-2 text-sm font-semibold rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 text-white hover:from-amber-400 hover:to-orange-500 transition-all duration-200 shadow-lg shadow-amber-900/40 hover:shadow-amber-900/60"
+            >
               Get started free
             </button>
           </div>
@@ -119,15 +177,38 @@ export default function Navbar() {
             </a>
           ))}
           <div className="mt-2 pt-3 border-t border-white/[0.06] flex flex-col gap-2">
-            <button className="w-full px-4 py-3 text-sm font-medium text-zinc-300 border border-white/10 rounded-xl hover:bg-white/[0.05] hover:text-white transition-all">
+            <button
+              type="button"
+              onClick={handleLoginClick}
+              className="w-full px-4 py-3 text-sm font-medium text-zinc-300 border border-white/10 rounded-xl hover:bg-white/[0.05] hover:text-white transition-all"
+            >
               Log in
             </button>
-            <button className="w-full px-4 py-3 text-sm font-semibold rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 text-white hover:from-amber-400 hover:to-orange-500 transition-all shadow-lg shadow-amber-900/40">
+            <button
+              type="button"
+              onClick={handleDashboardClick}
+              className="w-full px-4 py-3 text-sm font-medium text-zinc-300 border border-white/10 rounded-xl hover:bg-white/[0.05] hover:text-white transition-all"
+            >
+              Dashboard
+            </button>
+            <button
+              type="button"
+              onClick={handleSignupClick}
+              className="w-full px-4 py-3 text-sm font-semibold rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 text-white hover:from-amber-400 hover:to-orange-500 transition-all shadow-lg shadow-amber-900/40"
+            >
               Get started free
             </button>
           </div>
         </div>
       </div>
+
+      {authOpen ? (
+        <AuthModal
+          initialMode={authMode}
+          isOpen={authOpen}
+          onClose={() => setAuthOpen(false)}
+        />
+      ) : null}
     </>
   );
 }
