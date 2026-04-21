@@ -29,9 +29,10 @@ describe('SpeedDemo', () => {
   })
 
   it('starts playback and advances words over time', () => {
-    render(<SpeedDemo />)
+    const { container } = render(<SpeedDemo />)
+    const readWord = () => container.querySelector('.animate-word-in')?.textContent
 
-    expect(screen.getByText('The')).toBeInTheDocument()
+    expect(readWord()).toBe('The')
 
     fireEvent.click(screen.getByRole('button', { name: 'Try it live' }))
     expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument()
@@ -41,7 +42,7 @@ describe('SpeedDemo', () => {
       vi.advanceTimersByTime(151)
     })
 
-    expect(screen.getByText('key')).toBeInTheDocument()
+    expect(readWord()).toBe('key')
   })
 
   it('automatically stops and resets after reaching the end of the demo', () => {
