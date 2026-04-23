@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import Navbar from './ui/navbar';
 import SpeedDemo from './ui/speed-demo';
 
@@ -214,9 +215,9 @@ export default function Home() {
 
               {/* CTAs */}
               <div className="flex flex-col sm:flex-row gap-3">
-                <button className="w-full sm:w-auto px-7 py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 text-white font-semibold text-sm hover:from-amber-400 hover:to-orange-500 hover:-translate-y-0.5 transition-all duration-200 shadow-2xl shadow-amber-900/40 hover:shadow-amber-900/60">
+                <Link href="/login" className="w-full sm:w-auto px-7 py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 text-white font-semibold text-sm hover:from-amber-400 hover:to-orange-500 hover:-translate-y-0.5 transition-all duration-200 shadow-2xl shadow-amber-900/40 hover:shadow-amber-900/60 text-center">
                   Start reading — it&apos;s free
-                </button>
+                </Link>
                 <button className="w-full sm:w-auto px-7 py-3.5 rounded-xl border border-white/[0.1] text-zinc-300 font-semibold text-sm hover:bg-white/[0.04] hover:text-white hover:border-white/20 transition-all duration-200">
                   Try a sample →
                 </button>
