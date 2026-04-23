@@ -13,6 +13,7 @@ export function useAuthSession() {
       profileLoading: state.profileLoading,
       session: state.session,
       status: state.status,
+      updateDefaultWpm: state.updateDefaultWpm,
       updateDisplayName: state.updateDisplayName,
       user: state.user,
     })),

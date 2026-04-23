@@ -3,12 +3,7 @@
 import type { Session, User } from '@supabase/supabase-js';
 import { create } from 'zustand';
 import { createSupabaseBrowserClient } from './client';
-import {
-  getUserProfile,
-  upsertUserProfile,
-  updateUserDisplayName,
-  type UserProfile,
-} from './users';
+import { getUserProfile, type UserProfile } from './users';
 
 export type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 
@@ -21,6 +16,7 @@ type AuthState = {
   status: AuthStatus;
   user: User | null;
   setAuthError: (error: string) => void;
+  updateDefaultWpm: (wpm: number) => Promise<void>;
   updateDisplayName: (displayName: string) => Promise<void>;
 };
 
@@ -81,18 +77,59 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   status: 'loading',
   user: null,
   setAuthError: (authError) => set({ authError }),
-  updateDisplayName: async (displayName) => {
-    const { profile, user } = get();
+  updateDefaultWpm: async (wpm) => {
+    const { profile, session, user } = get();
 
-    if (!user) {
+    if (!user || !session) {
       throw new Error('You need to be logged in to update your profile.');
     }
 
-    const supabase = createSupabaseBrowserClient();
-    if (profile) {
-      await updateUserDisplayName(supabase, user.id, displayName);
-    } else {
-      await upsertUserProfile(supabase, { displayName, user });
+    const res = await fetch('/api/profile', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ wpm }),
+    });
+
+    if (!res.ok) {
+      const data = (await res.json()) as { error?: string };
+      throw new Error(data.error ?? 'Failed to update reading pace.');
+    }
+
+    set({
+      profile: profile
+        ? { ...profile, default_wpm: wpm }
+        : {
+            default_wpm: wpm,
+            display_name: null,
+            email: user.email ?? null,
+            focus_mode: 'highlight',
+            id: user.id,
+          },
+      profileError: '',
+    });
+  },
+  updateDisplayName: async (displayName) => {
+    const { profile, session, user } = get();
+
+    if (!user || !session) {
+      throw new Error('You need to be logged in to update your profile.');
+    }
+
+    const res = await fetch('/api/profile', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ displayName }),
+    });
+
+    if (!res.ok) {
+      const data = (await res.json()) as { error?: string };
+      throw new Error(data.error ?? 'Failed to update display name.');
     }
 
     set({

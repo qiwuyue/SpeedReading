@@ -20,7 +20,7 @@ export async function getUserProfile(supabase: SupabaseClient, userId: string) {
     .eq('id', userId)
     .maybeSingle();
 
-  if (error) throw error;
+  if (error) throw new Error(error.message);
   return data as UserProfile | null;
 }
 
@@ -41,7 +41,7 @@ export async function upsertUserProfile(
     { onConflict: 'id' },
   );
 
-  if (error) throw error;
+  if (error) throw new Error(error.message);
 }
 
 export async function updateUserDisplayName(
@@ -54,7 +54,20 @@ export async function updateUserDisplayName(
     .update({ display_name: displayName })
     .eq('id', userId);
 
-  if (error) throw error;
+  if (error) throw new Error(error.message);
+}
+
+export async function updateDefaultWpm(
+  supabase: SupabaseClient,
+  userId: string,
+  wpm: number,
+) {
+  const { error } = await supabase
+    .from('users')
+    .update({ default_wpm: wpm })
+    .eq('id', userId);
+
+  if (error) throw new Error(error.message);
 }
 
 export async function updateUserLastLogin(
@@ -66,5 +79,5 @@ export async function updateUserLastLogin(
     .update({ last_login_at: new Date().toISOString() })
     .eq('id', user.id);
 
-  if (error) throw error;
+  if (error) throw new Error(error.message);
 }
