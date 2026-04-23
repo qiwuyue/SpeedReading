@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import type { FormEvent } from 'react';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { useAuthSession } from '@/lib/supabase/use-auth-session';
 import { showToast } from '@/lib/toast-store';
@@ -41,6 +40,7 @@ export default function DashboardPage() {
     profile,
     profileError,
     status,
+    updateDefaultWpm,
     updateDisplayName,
     user,
   } = useAuthSession();
@@ -49,6 +49,8 @@ export default function DashboardPage() {
   const [displayNameModalOpen, setDisplayNameModalOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
+  const [wpmModalOpen, setWpmModalOpen] = useState(false);
+  const [wpmInput, setWpmInput] = useState('');
 
   const displayName = profile?.display_name?.trim() ?? '';
   const profileEmail = profile?.email ?? user?.email ?? '';
@@ -91,8 +93,50 @@ export default function DashboardPage() {
     }
   };
 
+  const handleWpmSubmit = async (event: { preventDefault(): void }) => {
+    event.preventDefault();
+
+    const wpm = parseInt(wpmInput, 10);
+    setAuthError('');
+
+    if (!user) {
+      const message = 'You need to be logged in to update your profile.';
+      setAuthError(message);
+      showToast({ message, title: 'Profile update failed', variant: 'error' });
+      return;
+    }
+
+    if (!wpmInput || isNaN(wpm) || wpm < 100 || wpm > 1000) {
+      const message = 'Please enter a WPM value between 100 and 1000.';
+      setAuthError(message);
+      showToast({ message, title: 'Profile update failed', variant: 'error' });
+      return;
+    }
+
+    setProfileSaving(true);
+
+    try {
+      await updateDefaultWpm(wpm);
+      setWpmModalOpen(false);
+      showToast({
+        message: `Default pace set to ${wpm} WPM.`,
+        title: 'Profile saved',
+        variant: 'success',
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to update your reading pace right now.';
+      setAuthError(message);
+      showToast({ message, title: 'Profile update failed', variant: 'error' });
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
   const handleDisplayNameSubmit = async (
-    event: FormEvent<HTMLFormElement>,
+    event: { preventDefault(): void },
   ) => {
     event.preventDefault();
 
@@ -262,7 +306,23 @@ export default function DashboardPage() {
               </p>
               <div className="mt-5 grid grid-cols-2 gap-3">
                 <div className="rounded-xl border border-white/[0.06] bg-black/20 p-4">
-                  <p className="text-xs text-zinc-500">Default pace</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-zinc-500">Default pace</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWpmInput(String(defaultWpm));
+                        setAuthError('');
+                        setWpmModalOpen(true);
+                      }}
+                      className="flex h-6 w-6 items-center justify-center rounded-full border border-white/10 text-zinc-400 transition-all hover:border-amber-400/30 hover:bg-amber-500/10 hover:text-amber-200"
+                      aria-label="Edit default reading pace"
+                    >
+                      <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6">
+                        <path d="M7.8 2.6 11.4 6.2M2.5 11.5l1-3.7 5.8-5.8a1.3 1.3 0 0 1 1.8 0l.9.9a1.3 1.3 0 0 1 0 1.8l-5.8 5.8-3.7 1Z" />
+                      </svg>
+                    </button>
+                  </div>
                   <p className="mt-2 text-2xl font-bold text-white">
                     {defaultWpm}
                   </p>
@@ -373,6 +433,92 @@ export default function DashboardPage() {
           </section>
         </section>
       </main>
+
+      {wpmModalOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="wpm-title"
+        >
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-xl" />
+          <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-white/[0.08] bg-[rgba(13,13,18,0.96)] p-px shadow-2xl shadow-black/60">
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -top-24 left-1/2 h-52 w-52 -translate-x-1/2 rounded-full bg-amber-500/20 blur-3xl"
+            />
+            <div className="relative rounded-[15px] bg-[rgba(9,9,11,0.9)] px-6 py-6">
+              <div className="mb-5 flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-amber-400">
+                    Reading pace
+                  </p>
+                  <h2
+                    id="wpm-title"
+                    className="mt-2 text-xl font-bold text-white"
+                  >
+                    Set default WPM
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setWpmModalOpen(false)}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 text-zinc-400 transition-all hover:border-white/20 hover:bg-white/[0.06] hover:text-white"
+                  aria-label="Close WPM dialog"
+                >
+                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8">
+                    <path d="M4.5 4.5l9 9M13.5 4.5l-9 9" />
+                  </svg>
+                </button>
+              </div>
+
+              <form className="flex flex-col gap-4" onSubmit={handleWpmSubmit}>
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-zinc-500">Words per minute</span>
+                    <span className="text-sm font-bold text-amber-300">{wpmInput || '—'} WPM</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={100}
+                    max={1000}
+                    step={10}
+                    value={wpmInput || defaultWpm}
+                    onChange={(e) => setWpmInput(e.target.value)}
+                    disabled={profileSaving}
+                    className="h-2 w-full cursor-pointer appearance-none rounded-full bg-white/10 accent-amber-400 disabled:cursor-not-allowed disabled:opacity-70"
+                  />
+                  <div className="flex justify-between text-[11px] text-zinc-600">
+                    <span>100</span>
+                    <span>550</span>
+                    <span>1000</span>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {[150, 250, 350, 500].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setWpmInput(String(preset))}
+                      disabled={profileSaving}
+                      className="flex-1 rounded-lg border border-white/10 py-2 text-xs font-semibold text-zinc-300 transition-all hover:border-amber-400/30 hover:bg-amber-500/10 hover:text-amber-200 disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="submit"
+                  disabled={profileSaving}
+                  className="h-12 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-6 text-sm font-semibold text-white shadow-xl shadow-amber-900/35 transition-all duration-200 hover:from-amber-400 hover:to-orange-500 disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {profileSaving ? 'Saving...' : 'Save pace'}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {displayNameModalOpen ? (
         <div

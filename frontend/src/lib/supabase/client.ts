@@ -5,7 +5,7 @@ let supabaseBrowserClient: ReturnType<typeof createClient> | null = null;
 export function createSupabaseBrowserClient() {
   if (supabaseBrowserClient) return supabaseBrowserClient;
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, '');
   const supabasePublishableKey =
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
