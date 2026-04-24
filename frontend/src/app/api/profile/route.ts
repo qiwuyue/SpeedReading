@@ -6,6 +6,8 @@ type ProfilePatchBody = {
   wpm?: unknown;
 };
 
+export const runtime = "edge";
+
 export async function PATCH(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
   if (!authHeader?.startsWith('Bearer ')) {
