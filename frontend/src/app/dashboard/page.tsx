@@ -229,7 +229,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-2">
             <Link
               href="/"
-              className="rounded-lg border border-white/10 px-4 py-2 text-sm font-medium text-zinc-300 transition-all hover:border-white/20 hover:bg-white/[0.05] hover:text-white"
+              className="hidden rounded-lg border border-white/10 px-3 py-2 text-sm font-medium text-zinc-300 transition-all hover:border-white/20 hover:bg-white/[0.05] hover:text-white sm:block sm:px-4"
             >
               Home
             </Link>
@@ -237,7 +237,7 @@ export default function DashboardPage() {
               type="button"
               onClick={handleLogout}
               disabled={loggingOut}
-              className="rounded-lg border border-white/10 px-4 py-2 text-sm font-medium text-zinc-300 transition-all hover:border-white/20 hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-lg border border-white/10 px-3 py-2 text-sm font-medium text-zinc-300 transition-all hover:border-white/20 hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-60 sm:px-4"
             >
               {loggingOut ? 'Logging out...' : 'Log out'}
             </button>
@@ -245,8 +245,8 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      <main className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-10 sm:px-6 sm:py-12">
-        <section className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-[rgba(13,13,18,0.9)] px-6 py-8 shadow-2xl shadow-black/30 sm:px-8">
+      <main className="mx-auto flex max-w-7xl flex-col gap-4 px-3 py-6 sm:gap-6 sm:px-6 sm:py-10">
+        <section className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-[rgba(13,13,18,0.9)] px-4 py-6 shadow-2xl shadow-black/30 sm:px-8 sm:py-8">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute -right-20 -top-28 h-72 w-72 rounded-full bg-amber-500/15 blur-3xl"
@@ -257,11 +257,11 @@ export default function DashboardPage() {
                 Dashboard
               </span>
               <div className="mt-3 flex flex-wrap items-end gap-x-3 gap-y-2">
-                <h1 className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl">
+                <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl lg:text-5xl">
                   Welcome back,
                 </h1>
                 <div className="flex items-center gap-2 pb-1">
-                  <span className="bg-gradient-to-r from-amber-300 to-orange-300 bg-clip-text text-4xl font-extrabold tracking-tight text-transparent sm:text-5xl">
+                  <span className="bg-gradient-to-r from-amber-300 to-orange-300 bg-clip-text text-3xl font-extrabold tracking-tight text-transparent sm:text-4xl lg:text-5xl">
                     {displayName || 'reader'}
                   </span>
                   <button
@@ -340,24 +340,24 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        <section className="grid gap-4 lg:grid-cols-[1fr_360px]">
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <section className="grid gap-3 sm:gap-4 lg:grid-cols-[1fr_360px]">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
             {MOCK_STATS.map(({ label, value, detail }) => (
               <div
                 key={label}
-                className="rounded-2xl border border-white/[0.07] bg-[rgba(13,13,18,0.86)] p-5"
+                className="rounded-2xl border border-white/[0.07] bg-[rgba(13,13,18,0.86)] p-4 sm:p-5"
               >
-                <p className="text-sm text-zinc-500">{label}</p>
-                <p className="mt-4 text-3xl font-bold text-white">{value}</p>
-                <p className="mt-2 text-xs font-medium text-amber-300">
+                <p className="text-xs text-zinc-500 sm:text-sm">{label}</p>
+                <p className="mt-3 text-2xl font-bold text-white sm:mt-4 sm:text-3xl">{value}</p>
+                <p className="mt-1 text-xs font-medium text-amber-300 sm:mt-2">
                   {detail}
                 </p>
               </div>
             ))}
           </div>
 
-          <section className="rounded-2xl border border-white/[0.07] bg-[rgba(13,13,18,0.86)] p-6">
-            <h2 className="text-xl font-bold text-white">User info</h2>
+          <section className="rounded-2xl border border-white/[0.07] bg-[rgba(13,13,18,0.86)] p-4 sm:p-6">
+            <h2 className="text-lg font-bold text-white sm:text-xl">User info</h2>
             <div className="mt-5 space-y-4">
               {[
                 ['Display name', displayName || 'Not set'],
@@ -370,7 +370,7 @@ export default function DashboardPage() {
                   className="flex items-center justify-between gap-4 border-b border-white/[0.06] pb-3 last:border-b-0 last:pb-0"
                 >
                   <span className="text-sm text-zinc-500">{label}</span>
-                  <span className="text-right text-sm font-medium text-zinc-200">
+                  <span className="max-w-[55%] truncate text-right text-sm font-medium text-zinc-200">
                     {value}
                   </span>
                 </div>
@@ -379,9 +379,9 @@ export default function DashboardPage() {
           </section>
         </section>
 
-        <section className="grid gap-4 lg:grid-cols-[360px_1fr]">
-          <section className="rounded-2xl border border-white/[0.07] bg-[rgba(13,13,18,0.86)] p-6">
-            <h2 className="text-xl font-bold text-white">Quick actions</h2>
+        <section className="grid gap-3 sm:gap-4 lg:grid-cols-[360px_1fr]">
+          <section className="rounded-2xl border border-white/[0.07] bg-[rgba(13,13,18,0.86)] p-4 sm:p-6">
+            <h2 className="text-lg font-bold text-white sm:text-xl">Quick actions</h2>
             <div className="mt-5 grid gap-3">
               {QUICK_ACTIONS.map(({ title, desc }) => (
                 <button
@@ -400,10 +400,10 @@ export default function DashboardPage() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-white/[0.07] bg-[rgba(13,13,18,0.86)] p-6">
-            <div className="mb-5 flex items-center justify-between gap-4">
+          <section className="rounded-2xl border border-white/[0.07] bg-[rgba(13,13,18,0.86)] p-4 sm:p-6">
+            <div className="mb-4 flex items-center justify-between gap-4 sm:mb-5">
               <div>
-                <h2 className="text-xl font-bold text-white">
+                <h2 className="text-lg font-bold text-white sm:text-xl">
                   Recent documents
                 </h2>
                 <p className="mt-1 text-sm text-zinc-500">
@@ -418,8 +418,8 @@ export default function DashboardPage() {
                   key={title}
                   className="flex flex-col gap-3 rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <div>
-                    <p className="font-medium text-zinc-200">{title}</p>
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-zinc-200">{title}</p>
                     <p className="mt-1 text-xs text-zinc-500">
                       {progress} complete
                     </p>
