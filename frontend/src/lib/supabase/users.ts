@@ -5,11 +5,16 @@ type UserProfileInput = {
   user: User;
 };
 
+export enum FocusMode {
+  HIGHLIGHT = "highlight",
+  DOT = "dot",
+  NONE = "none",
+} 
 export type UserProfile = {
   default_wpm: number | null;
   display_name: string | null;
   email: string | null;
-  focus_mode: string | null;
+  focus_mode: FocusMode | null;
   id: string;
 };
 
@@ -33,7 +38,7 @@ export async function upsertUserProfile(
       default_wpm: 250,
       display_name: displayName,
       email: user.email,
-      focus_mode: 'highlight',
+      focus_mode: FocusMode.HIGHLIGHT,
       id: user.id,
       last_login_at: new Date().toISOString(),
       role: 'user',
