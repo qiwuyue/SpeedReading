@@ -1,5 +1,7 @@
 "use client";
 
+export const runtime = "edge";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -37,7 +39,7 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
   useEffect(() => {
     if (isPaused || !words.length) return;
 
-    const msPerWord = (60000 / wpm);
+    const msPerWord = 60000 / wpm;
     const timer = setTimeout(() => {
       if (currentWordIndex < words.length - 1) {
         setCurrentWordIndex(currentWordIndex + 1);
@@ -136,7 +138,7 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
             aria-hidden="true"
             className="pointer-events-none absolute -right-20 -top-28 h-72 w-72 rounded-full bg-amber-500/15 blur-3xl"
           />
-          
+
           <div className="relative mb-12 min-h-32">
             <div className="flex flex-wrap gap-2 text-center text-3xl font-bold leading-relaxed sm:text-4xl">
               {words.map((word, index) => (
@@ -146,8 +148,8 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
                     index === currentWordIndex
                       ? "text-amber-400 scale-110"
                       : index < currentWordIndex
-                      ? "text-zinc-500"
-                      : "text-white/60"
+                        ? "text-zinc-500"
+                        : "text-white/60"
                   }`}
                 >
                   {word}
@@ -180,14 +182,18 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
                   {isPaused ? "Resume" : "Pause"}
                 </button>
                 <button
-                  onClick={() => setCurrentWordIndex(Math.max(0, currentWordIndex - 1))}
+                  onClick={() =>
+                    setCurrentWordIndex(Math.max(0, currentWordIndex - 1))
+                  }
                   className="rounded-lg border border-white/10 px-4 py-2 font-semibold text-zinc-300 transition-all hover:border-white/20 hover:bg-white/5 hover:text-white"
                 >
                   ← Back
                 </button>
                 <button
                   onClick={() =>
-                    setCurrentWordIndex(Math.min(words.length - 1, currentWordIndex + 1))
+                    setCurrentWordIndex(
+                      Math.min(words.length - 1, currentWordIndex + 1),
+                    )
                   }
                   className="rounded-lg border border-white/10 px-4 py-2 font-semibold text-zinc-300 transition-all hover:border-white/20 hover:bg-white/5 hover:text-white"
                 >
