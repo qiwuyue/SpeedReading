@@ -285,88 +285,96 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
             className="pointer-events-none absolute -right-20 -top-28 h-72 w-72 rounded-full bg-amber-500/15 blur-3xl"
           />
 
-          <div className="relative mb-12 min-h-32">
-            <div className="flex flex-wrap gap-2 text-center text-3xl font-bold leading-relaxed sm:text-4xl">
-              {words.map((word, index) => (
-                <span
-                  key={index}
-                  className={`transition-all duration-200 ${
-                    index === currentWordIndex
-                      ? "text-amber-400 scale-110"
-                      : index < currentWordIndex
-                        ? "text-zinc-500"
-                        : "text-white/60"
-                  }`}
-                >
-                  {word}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* Controls */}
-          <div className="mt-8 flex flex-col gap-4">
-            {/* Progress Bar */}
-            <div className="w-full">
-              <div className="h-1 w-full rounded-full bg-white/10">
-                <div
-                  className="h-full rounded-full bg-linear-to-r from-amber-500 to-orange-600 transition-all duration-300"
-                  style={{
-                    width: `${((currentWordIndex + 1) / words.length) * 100}%`,
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Control Buttons */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setIsPaused(!isPaused)}
-                  className="flex-1 rounded-lg bg-linear-to-r from-amber-500 to-orange-600 px-4 py-2 font-semibold text-white transition-all hover:from-amber-400 hover:to-orange-500 sm:flex-none sm:px-6"
-                >
-                  {isPaused ? "Resume" : "Pause"}
-                </button>
-                <button
-                  onClick={() =>
-                    setCurrentWordIndex(Math.max(0, currentWordIndex - 1))
-                  }
-                  className="rounded-lg border border-white/10 px-4 py-2 font-semibold text-zinc-300 transition-all hover:border-white/20 hover:bg-white/5 hover:text-white"
-                >
-                  ← Back
-                </button>
-                <button
-                  onClick={() =>
-                    setCurrentWordIndex(
-                      Math.min(words.length - 1, currentWordIndex + 1),
-                    )
-                  }
-                  className="rounded-lg border border-white/10 px-4 py-2 font-semibold text-zinc-300 transition-all hover:border-white/20 hover:bg-white/5 hover:text-white"
-                >
-                  Next →
-                </button>
+          {words.length > 0 ? (
+            <>
+              <div className="relative mb-12 min-h-32">
+                <div className="flex flex-wrap gap-2 text-center text-3xl font-bold leading-relaxed sm:text-4xl">
+                  {words.map((word, index) => (
+                    <span
+                      key={index}
+                      className={`transition-all duration-200 ${
+                        index === currentWordIndex
+                          ? "text-amber-400 scale-110"
+                          : index < currentWordIndex
+                            ? "text-zinc-500"
+                            : "text-white/60"
+                      }`}
+                    >
+                      {word}
+                    </span>
+                  ))}
+                </div>
               </div>
 
-              {/* WPM Adjustment */}
-              <div className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 px-4 py-2">
-                <label htmlFor="wpm" className="text-sm text-zinc-400">
-                  Speed:
-                </label>
-                <input
-                  id="wpm"
-                  type="range"
-                  min="100"
-                  max="500"
-                  value={wpm}
-                  onChange={(e) => setWpm(Number(e.target.value))}
-                  className="w-20 cursor-pointer"
-                />
-                <span className="min-w-12 text-right text-sm font-semibold text-amber-300">
-                  {wpm}
-                </span>
+              {/* Controls */}
+              <div className="mt-8 flex flex-col gap-4">
+                {/* Progress Bar */}
+                <div className="w-full">
+                  <div className="h-1 w-full rounded-full bg-white/10">
+                    <div
+                      className="h-full rounded-full bg-linear-to-r from-amber-500 to-orange-600 transition-all duration-300"
+                      style={{
+                        width: `${((currentWordIndex + 1) / words.length) * 100}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Control Buttons */}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setIsPaused(!isPaused)}
+                      className="flex-1 rounded-lg bg-linear-to-r from-amber-500 to-orange-600 px-4 py-2 font-semibold text-white transition-all hover:from-amber-400 hover:to-orange-500 sm:flex-none sm:px-6"
+                    >
+                      {isPaused ? "Resume" : "Pause"}
+                    </button>
+                    <button
+                      onClick={() =>
+                        setCurrentWordIndex(Math.max(0, currentWordIndex - 1))
+                      }
+                      className="rounded-lg border border-white/10 px-4 py-2 font-semibold text-zinc-300 transition-all hover:border-white/20 hover:bg-white/5 hover:text-white"
+                    >
+                      ← Back
+                    </button>
+                    <button
+                      onClick={() =>
+                        setCurrentWordIndex(
+                          Math.min(words.length - 1, currentWordIndex + 1),
+                        )
+                      }
+                      className="rounded-lg border border-white/10 px-4 py-2 font-semibold text-zinc-300 transition-all hover:border-white/20 hover:bg-white/5 hover:text-white"
+                    >
+                      Next →
+                    </button>
+                  </div>
+
+                  {/* WPM Adjustment */}
+                  <div className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 px-4 py-2">
+                    <label htmlFor="wpm" className="text-sm text-zinc-400">
+                      Speed:
+                    </label>
+                    <input
+                      id="wpm"
+                      type="range"
+                      min="100"
+                      max="500"
+                      value={wpm}
+                      onChange={(e) => setWpm(Number(e.target.value))}
+                      className="w-20 cursor-pointer"
+                    />
+                    <span className="min-w-12 text-right text-sm font-semibold text-amber-300">
+                      {wpm}
+                    </span>
+                  </div>
+                </div>
               </div>
+            </>
+          ) : (
+            <div className="flex min-h-32 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/5 px-6 py-10 text-center text-zinc-400">
+              Loading words...
             </div>
-          </div>
+          )}
         </div>
 
         {/* Session Complete Message */}
