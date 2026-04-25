@@ -154,7 +154,7 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
     const resolver = async () => {
       const session = await fetchSessionData();
       if (session) {
-        
+        console.log("Session:", session);
         //await analyzeFileContent(session.fileBytes, session.fileName);
       }
     };
@@ -377,7 +377,7 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
               Session Complete! 🎉
             </p>
             <p className="mt-2 text-sm text-zinc-400">
-              You've finished reading this session. Great job!
+              You&apos;ve finished reading this session. Great job!
             </p>
             <div className="mt-4 flex gap-3 justify-center">
               <button
