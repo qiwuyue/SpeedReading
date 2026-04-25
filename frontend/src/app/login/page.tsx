@@ -20,8 +20,8 @@ export default function LoginPage() {
         aria-hidden="true"
         className="pointer-events-none fixed inset-0 -z-10"
       >
-        <div className="absolute right-[12%] top-[12%] h-130 w-130 rounded-full bg-amber-600/8 blur-[130px]" />
-        <div className="absolute bottom-[8%] left-[5%] h-105 w-105 rounded-full bg-orange-600/6 blur-[110px]" />
+        <div className="absolute right-[12%] top-[12%] h-[520px] w-[520px] rounded-full bg-amber-600/8 blur-[130px]" />
+        <div className="absolute bottom-[8%] left-[5%] h-[420px] w-[420px] rounded-full bg-orange-600/6 blur-[110px]" />
       </div>
 
       <header className="border-b border-white/6rgba(9,9,11,0.82)] backdrop-blur-2xl">
