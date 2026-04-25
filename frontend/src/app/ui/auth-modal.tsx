@@ -1,15 +1,13 @@
-'use client';
+"use client";
 
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import type { FormEvent } from 'react';
-import { createSupabaseBrowserClient } from '@/lib/supabase/client';
-import {
-  updateUserLastLogin,
-  upsertUserProfile,
-} from '@/lib/supabase/users';
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
+import type { User } from "@supabase/supabase-js";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { updateUserLastLogin, upsertUserProfile } from "@/lib/supabase/users";
 
-export type AuthMode = 'login' | 'signup';
+export type AuthMode = "login" | "signup";
 
 type AuthModalProps = {
   initialMode: AuthMode;
@@ -25,7 +23,7 @@ type AuthErrors = {
 };
 
 const inputClassName =
-  'h-12 rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm text-white outline-none transition-all placeholder:text-zinc-600 focus:border-amber-400/50 focus:bg-white/[0.06] focus:shadow-[0_0_0_3px_rgba(245,158,11,0.12)]';
+  "h-12 rounded-xl border border-white/10 bg-white/[0.04] px-4 text-base sm:text-sm text-white outline-none transition-all placeholder:text-zinc-600 focus:border-amber-400/50 focus:bg-white/[0.06] focus:shadow-[0_0_0_3px_rgba(245,158,11,0.12)]";
 
 export default function AuthModal({
   initialMode,
@@ -34,27 +32,27 @@ export default function AuthModal({
 }: AuthModalProps) {
   const router = useRouter();
   const [mode, setMode] = useState<AuthMode>(initialMode);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [errors, setErrors] = useState<AuthErrors>({});
-  const [successMessage, setSuccessMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const isSignup = mode === 'signup';
-  const title = isSignup ? 'Create account' : 'Log in';
-  const eyebrow = isSignup ? 'Start reading faster' : 'Welcome back';
-  const submitLabel = isSignup ? 'Create account' : 'Log in';
+  const isSignup = mode === "signup";
+  const title = isSignup ? "Create account" : "Log in";
+  const eyebrow = isSignup ? "Start reading faster" : "Welcome back";
+  const submitLabel = isSignup ? "Create account" : "Log in";
 
   useEffect(() => {
     if (!isOpen) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === "Escape") onClose();
     };
 
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
@@ -62,8 +60,8 @@ export default function AuthModal({
   const switchMode = (nextMode: AuthMode) => {
     setMode(nextMode);
     setErrors({});
-    setSuccessMessage('');
-    setConfirmPassword('');
+    setSuccessMessage("");
+    setConfirmPassword("");
   };
 
   const validate = () => {
@@ -71,30 +69,49 @@ export default function AuthModal({
     const trimmedEmail = email.trim();
 
     if (!trimmedEmail) {
-      nextErrors.email = 'Email is required.';
+      nextErrors.email = "Email is required.";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      nextErrors.email = 'Enter a valid email address.';
+      nextErrors.email = "Enter a valid email address.";
     }
 
     if (!password) {
-      nextErrors.password = 'Password is required.';
+      nextErrors.password = "Password is required.";
     } else if (password.length < 8) {
-      nextErrors.password = 'Password must be at least 8 characters.';
+      nextErrors.password = "Password must be at least 8 characters.";
     }
 
     if (isSignup && !confirmPassword) {
-      nextErrors.confirmPassword = 'Please confirm your password.';
+      nextErrors.confirmPassword = "Please confirm your password.";
     } else if (isSignup && confirmPassword !== password) {
-      nextErrors.confirmPassword = 'Passwords do not match.';
+      nextErrors.confirmPassword = "Passwords do not match.";
     }
 
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
 
+  const handleAuthSuccess = async (
+    supabase: ReturnType<typeof createSupabaseBrowserClient>,
+    user: User,
+  ) => {
+    try {
+      await upsertUserProfile(supabase, { user });
+      await updateUserLastLogin(supabase, user);
+    } catch (profileError) {
+      setErrors({
+        form:
+          profileError instanceof Error
+            ? profileError.message
+            : "Logged in, but the user profile could not be updated.",
+      });
+      return false;
+    }
+    return true;
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setSuccessMessage('');
+    setSuccessMessage("");
 
     if (!validate()) return;
 
@@ -112,7 +129,7 @@ export default function AuthModal({
         form:
           error instanceof Error
             ? error.message
-            : 'Supabase is not configured yet.',
+            : "Supabase is not configured yet.",
       });
       return;
     }
@@ -138,7 +155,7 @@ export default function AuthModal({
             form:
               profileError instanceof Error
                 ? profileError.message
-                : 'Account created, but the user profile could not be saved.',
+                : "Account created, but the user profile could not be saved.",
           });
           return;
         }
@@ -146,12 +163,12 @@ export default function AuthModal({
 
       if (data.session) {
         onClose();
-        router.push('/dashboard');
+        router.push("/dashboard");
         return;
       }
 
       setSuccessMessage(
-        'Check your email to confirm your account, then come back to log in.',
+        "Check your email to confirm your account, then come back to log in.",
       );
       return;
     }
@@ -169,22 +186,15 @@ export default function AuthModal({
     }
 
     if (data.user) {
-      try {
-        await upsertUserProfile(supabase, { user: data.user });
-        await updateUserLastLogin(supabase, data.user);
-      } catch (profileError) {
-        setErrors({
-          form:
-            profileError instanceof Error
-              ? profileError.message
-              : 'Logged in, but the user profile could not be updated.',
-        });
+      const success = await handleAuthSuccess(supabase, data.user);
+      if (!success) {
+        setLoading(false);
         return;
       }
     }
 
     onClose();
-    router.push('/dashboard');
+    router.push("/dashboard");
   };
 
   return (
@@ -195,9 +205,7 @@ export default function AuthModal({
       aria-labelledby="auth-modal-title"
     >
       <div className="absolute inset-0 bg-black/70 backdrop-blur-xl" />
-      <div
-        className="relative w-full max-w-md overflow-hidden rounded-2xl border border-white/[0.08] bg-[rgba(13,13,18,0.96)] p-px shadow-2xl shadow-black/60"
-      >
+      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-white/[0.08] bg-[rgba(13,13,18,0.96)] p-px shadow-2xl shadow-black/60">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute -top-24 left-1/2 h-56 w-56 -translate-x-1/2 rounded-full bg-amber-500/20 blur-3xl"
@@ -263,7 +271,7 @@ export default function AuthModal({
                 placeholder="you@example.com"
                 disabled={loading}
                 aria-invalid={Boolean(errors.email)}
-                aria-describedby={errors.email ? 'auth-email-error' : undefined}
+                aria-describedby={errors.email ? "auth-email-error" : undefined}
               />
               {errors.email ? (
                 <span id="auth-email-error" className="text-xs text-rose-300">
@@ -278,7 +286,7 @@ export default function AuthModal({
               </span>
               <input
                 type="password"
-                autoComplete={isSignup ? 'new-password' : 'current-password'}
+                autoComplete={isSignup ? "new-password" : "current-password"}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 className={inputClassName}
@@ -286,7 +294,7 @@ export default function AuthModal({
                 disabled={loading}
                 aria-invalid={Boolean(errors.password)}
                 aria-describedby={
-                  errors.password ? 'auth-password-error' : undefined
+                  errors.password ? "auth-password-error" : undefined
                 }
               />
               {errors.password ? (
@@ -315,7 +323,7 @@ export default function AuthModal({
                   aria-invalid={Boolean(errors.confirmPassword)}
                   aria-describedby={
                     errors.confirmPassword
-                      ? 'auth-confirm-password-error'
+                      ? "auth-confirm-password-error"
                       : undefined
                   }
                 />
@@ -335,17 +343,64 @@ export default function AuthModal({
               disabled={loading}
               className="mt-2 h-12 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 text-sm font-semibold text-white shadow-xl shadow-amber-900/35 transition-all duration-200 hover:from-amber-400 hover:to-orange-500 hover:shadow-amber-900/55 disabled:cursor-not-allowed disabled:opacity-70"
             >
-              {loading ? 'Please wait...' : submitLabel}
+              {loading ? "Please wait..." : submitLabel}
+            </button>
+
+            <button
+              type="button"
+              onClick={async () => {
+                setSuccessMessage("");
+                setErrors({});
+                setLoading(true);
+
+                try {
+                  const supabase = createSupabaseBrowserClient();
+                  const { data, error } =
+                    await supabase.auth.signInAnonymously();
+
+                  if (error) {
+                    setLoading(false);
+                    setErrors({ form: error.message });
+                    return;
+                  }
+
+                  if (data.user) {
+                    const success = await handleAuthSuccess(
+                      supabase,
+                      data.user,
+                    );
+                    if (!success) {
+                      setLoading(false);
+                      return;
+                    }
+                  }
+
+                  onClose();
+                  router.push("/dashboard");
+                } catch (error) {
+                  setLoading(false);
+                  setErrors({
+                    form:
+                      error instanceof Error
+                        ? error.message
+                        : "Failed to continue as guest.",
+                  });
+                }
+              }}
+              disabled={loading}
+              className="mt-3 h-12 rounded-xl border border-white/20 bg-white/[0.04] text-sm font-semibold text-white transition-all duration-200 hover:border-white/40 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {loading ? "Please wait..." : "Continue as Guest"}
             </button>
           </form>
 
           <div className="mt-5 border-t border-white/[0.06] pt-5 text-center text-sm text-zinc-500">
             {isSignup ? (
               <>
-                Already have an account?{' '}
+                Already have an account?{" "}
                 <button
                   type="button"
-                  onClick={() => switchMode('login')}
+                  onClick={() => switchMode("login")}
                   className="font-semibold text-amber-300 transition-colors hover:text-amber-200"
                 >
                   Log in
@@ -353,10 +408,10 @@ export default function AuthModal({
               </>
             ) : (
               <>
-                Don&apos;t have an account?{' '}
+                Don&apos;t have an account?{" "}
                 <button
                   type="button"
-                  onClick={() => switchMode('signup')}
+                  onClick={() => switchMode("signup")}
                   className="font-semibold text-amber-300 transition-colors hover:text-amber-200"
                 >
                   Sign up

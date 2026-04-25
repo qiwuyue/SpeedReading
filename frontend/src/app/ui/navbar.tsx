@@ -91,41 +91,37 @@ export default function Navbar() {
           </Link>
 
           {/* Desktop nav */}
-          <nav className="hidden sm:flex items-center gap-1">
-            {[{ label: "", href: "#how" }].map(({ label, href }) => (
-              <a
-                key={label}
-                href={href}
-                className="px-4 py-2 text-sm text-zinc-400 hover:text-white rounded-lg hover:bg-white/[0.05] transition-all duration-200"
-              >
-                {label}
-              </a>
-            ))}
-          </nav>
+          <nav className="hidden sm:flex items-center gap-1"></nav>
 
           {/* Desktop CTAs */}
           <div className="hidden sm:flex items-center gap-3">
-            <button
-              type="button"
-              onClick={handleLoginClick}
-              className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-white transition-colors"
-            >
-              Log in
-            </button>
-            <button
-              type="button"
-              onClick={handleDashboardClick}
-              className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-white transition-colors"
-            >
-              Dashboard
-            </button>
-            <button
-              type="button"
-              onClick={handleSignupClick}
-              className="px-4 py-2 text-sm font-semibold rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 text-white hover:from-amber-400 hover:to-orange-500 transition-all duration-200 shadow-lg shadow-amber-900/40 hover:shadow-amber-900/60"
-            >
-              Get started free
-            </button>
+            {!isAuthenticated && (
+              <button
+                type="button"
+                onClick={handleLoginClick}
+                className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-white transition-colors"
+              >
+                Log in
+              </button>
+            )}
+            {isAuthenticated && (
+              <button
+                type="button"
+                onClick={handleDashboardClick}
+                className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-white transition-colors"
+              >
+                Dashboard
+              </button>
+            )}
+            {!isAuthenticated && (
+              <button
+                type="button"
+                onClick={handleSignupClick}
+                className="px-4 py-2 text-sm font-semibold rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 text-white hover:from-amber-400 hover:to-orange-500 transition-all duration-200 shadow-lg shadow-amber-900/40 hover:shadow-amber-900/60"
+              >
+                Get started free
+              </button>
+            )}
           </div>
 
           {/* Hamburger — mobile only */}
@@ -166,38 +162,34 @@ export default function Navbar() {
         }`}
       >
         <div className="bg-[rgba(9,9,11,0.97)] backdrop-blur-2xl border-b border-white/[0.06] px-4 py-3 flex flex-col gap-0.5">
-          {[{ label: "", href: "#how" }].map(({ label, href }) => (
-            <a
-              key={label}
-              href={href}
-              onClick={() => setOpen(false)}
-              className="px-4 py-3 text-sm font-medium text-zinc-300 hover:text-white hover:bg-white/[0.05] rounded-xl transition-all"
-            >
-              {label}
-            </a>
-          ))}
           <div className="mt-2 pt-3 border-t border-white/[0.06] flex flex-col gap-2">
-            <button
-              type="button"
-              onClick={handleLoginClick}
-              className="w-full px-4 py-3 text-sm font-medium text-zinc-300 border border-white/10 rounded-xl hover:bg-white/[0.05] hover:text-white transition-all"
-            >
-              Log in
-            </button>
-            <button
-              type="button"
-              onClick={handleDashboardClick}
-              className="w-full px-4 py-3 text-sm font-medium text-zinc-300 border border-white/10 rounded-xl hover:bg-white/[0.05] hover:text-white transition-all"
-            >
-              Dashboard
-            </button>
-            <button
-              type="button"
-              onClick={handleSignupClick}
-              className="w-full px-4 py-3 text-sm font-semibold rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 text-white hover:from-amber-400 hover:to-orange-500 transition-all shadow-lg shadow-amber-900/40"
-            >
-              Get started free
-            </button>
+            {!isAuthenticated && (
+              <button
+                type="button"
+                onClick={handleLoginClick}
+                className="w-full px-4 py-3 text-sm font-medium text-zinc-300 border border-white/10 rounded-xl hover:bg-white/[0.05] hover:text-white transition-all"
+              >
+                Log in
+              </button>
+            )}
+            {isAuthenticated && (
+              <button
+                type="button"
+                onClick={handleDashboardClick}
+                className="w-full px-4 py-3 text-sm font-medium text-zinc-300 border border-white/10 rounded-xl hover:bg-white/[0.05] hover:text-white transition-all"
+              >
+                Dashboard
+              </button>
+            )}
+            {!isAuthenticated && (
+              <button
+                type="button"
+                onClick={handleSignupClick}
+                className="w-full px-4 py-3 text-sm font-semibold rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 text-white hover:from-amber-400 hover:to-orange-500 transition-all shadow-lg shadow-amber-900/40"
+              >
+                Get started free
+              </button>
+            )}
           </div>
         </div>
       </div>
