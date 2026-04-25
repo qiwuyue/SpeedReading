@@ -46,12 +46,7 @@ export default function SessionPage() {
       setIsStarting(true);
 
       // Get the auth token from session
-      console.log(
-        "Starting session with auth status:",
-        status,
-        "session:",
-        session,
-      );
+      console.log("Starting session with auth status:", status, "hasSession:", Boolean(session));
       const token = session?.access_token;
       if (!token) {
         showToast({
