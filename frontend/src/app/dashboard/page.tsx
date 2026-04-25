@@ -6,8 +6,9 @@ import { useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useAuthSession } from "@/lib/supabase/use-auth-session";
 import { showToast } from "@/lib/toast-store";
+import { useUploadStore } from "@/lib/store/upload-store";
 import { FocusMode, isAnonymousUser } from "@/lib/supabase/users";
-import { UploadFile } from "@/components/ui/upload-file";
+import { UploadFile } from "@/app/ui/upload-file";
 import ConvertAnonModal from "@/app/ui/convert-anon-modal";
 
 const MOCK_STATS = [
@@ -49,6 +50,7 @@ export default function DashboardPage() {
     updateFocusMode,
     user,
   } = useAuthSession();
+  const setPendingFile = useUploadStore((state) => state.setPendingFile);
   const [authError, setAuthError] = useState("");
   const [convertModalOpen, setConvertModalOpen] = useState(false);
   const [displayNameInput, setDisplayNameInput] = useState("");
@@ -99,9 +101,8 @@ export default function DashboardPage() {
       const reader = new FileReader();
       reader.onload = () => {
         const base64String = (reader.result as string).split(",")[1];
-        // Store in sessionStorage
-        sessionStorage.setItem("pendingFile", base64String);
-        sessionStorage.setItem("pendingFileName", file.name);
+        // Store in Zustand
+        setPendingFile(base64String, file.name);
 
         showToast({
           message: `${file.name} uploaded successfully!`,

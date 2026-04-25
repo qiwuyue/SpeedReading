@@ -1,40 +1,167 @@
 "use client";
 
-export const runtime = "edge";
-
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { use } from "react";
 import { useAuthSession } from "@/lib/supabase/use-auth-session";
+import { showToast } from "@/lib/toast-store";
+import { useUploadStore } from "@/lib/store/upload-store";
 
 type SessionPageProps = {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 };
 
 export default function ReadingSessionPage({ params }: SessionPageProps) {
   const router = useRouter();
-  const { status, profile } = useAuthSession();
+  const { id: sessionId } = use(params);
+  const { status, profile, session } = useAuthSession();
   const [isLoading, setIsLoading] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [wpm, setWpm] = useState(profile?.default_wpm || 250);
+  const [words, setWords] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
-  // Sample text for demonstration
-  const sampleText = `The quick brown fox jumps over the lazy dog. This is a sample reading session. 
-  You can adjust your reading speed using the controls below. The system will highlight each word 
-  as you progress through the text. This helps you maintain focus and track your reading pace. 
-  Try different focus modes to see which works best for you.`;
-
-  const words = sampleText.split(/\s+/).filter((word) => word.length > 0);
-
+  // Fetch session and file from API
   useEffect(() => {
     if (status === "unauthenticated") {
       router.replace("/login");
+      return;
     }
-    setIsLoading(false);
-  }, [router, status]);
+
+    if (status !== "authenticated" || !session?.access_token) {
+      return;
+    }
+
+    const fetchSessionData = async () => {
+      try {
+        const response = await fetch(`/api/sessions/${sessionId}`, {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        });
+
+        if (!response.ok) {
+          setError(`Failed to load session: ${response.statusText}`);
+          showToast({
+            message: `Failed to load session: ${response.statusText}`,
+            variant: "error",
+          });
+          setIsLoading(false);
+          router.replace("/dashboard");
+          return;
+        }
+
+        const data = await response.json();
+        console.log("Session Data:", data);
+        // if (!data.fileBytes && !data.fileError) {
+        //   setError("Session has no associated file.");
+        //   showToast({
+        //     message: "Session has no associated file.",
+        //     variant: "error",
+        //   });
+        //   setIsLoading(false);
+        //   router.replace("/dashboard");
+        //   return;
+        // }
+        
+        // if (data.fileError) {
+        //   setError(`Error loading file: ${data.fileError}`);
+        //   showToast({
+        //     message: `Error loading file: ${data.fileError}`,
+        //     variant: "error",
+        //   });
+        //   setIsLoading(false);
+        //   router.replace("/dashboard");
+        //   return;
+        // }
+        
+      
+        setIsLoading(false);
+        return { sessionId: data.session.id, fileid: data.session.file_id };
+      } catch (err) {
+        console.error("Error:", err);
+        setError(err instanceof Error ? err.message : "Failed to load session");
+        showToast({
+          message: "Failed to load session data",
+          variant: "error",
+        });
+        setIsLoading(false);
+      }
+    };
+    const analyzeFileContent = async (content: string, fileName: string) => {
+      try {
+        const formdata = new FormData();
+        formdata.append("file", new Blob([content]), fileName);
+
+        const response = await fetch("/api/ai", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: formdata,
+        });
+        
+        if (!response.ok) {
+          setError(`AI analysis failed: ${response.statusText}`);
+          showToast({
+            message: `AI analysis failed: ${response.statusText}`,
+            variant: "error",
+          });
+          return;
+        }
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error("Failed to read AI response stream");
+        }
+        
+        const decoder = new TextDecoder();
+        let aiResponse = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          aiResponse += decoder.decode(value, { stream: true });
+        }
+        
+        console.log("Raw AI Response:", aiResponse); 
+        //const parsed = JSON.parse(aiResponse);
+        // if (parsed.error) {
+        //   setError(`AI analysis error: ${parsed.error}`);
+        //   showToast({
+        //     message: `AI analysis error: ${parsed.error}`,
+        //     variant: "error",
+        //   });
+        // }
+
+        //const text = parsed.result.text as string;
+        //setWords(text.split(/\s+/));
+        
+      } catch (err) {
+        console.error("AI Analysis Error:", err);
+        setError(err instanceof Error ? err.message : "AI analysis failed");
+        showToast({
+          message: "Failed to analyze file content",
+          variant: "error",
+        });
+      }
+    }
+    
+
+    const resolver = async () => {
+      const session = await fetchSessionData();
+      if (session) {
+        
+        //await analyzeFileContent(session.fileBytes, session.fileName);
+      }
+    };
+
+    resolver();
+
+  }, [sessionId, status, session?.access_token, router]);
 
   useEffect(() => {
     if (isPaused || !words.length) return;
@@ -55,7 +182,23 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#09090b] px-4 text-white">
         <div className="rounded-2xl border border-white/8 bg-[rgba(13,13,18,0.9)] px-6 py-5 text-sm text-zinc-400 shadow-2xl shadow-black/30">
-          Loading reading session...
+          Loading your reading session...
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !words.length) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#09090b] px-4 text-white">
+        <div className="rounded-2xl border border-white/8 bg-[rgba(13,13,18,0.9)] px-6 py-5 text-sm text-zinc-400 shadow-2xl shadow-black/30">
+          <p className="text-red-400">{error}</p>
+          <Link
+            href="/dashboard"
+            className="mt-4 inline-block rounded-lg bg-linear-to-r from-amber-500 to-orange-600 px-4 py-2 font-semibold text-white transition-all hover:from-amber-400 hover:to-orange-500"
+          >
+            Back to Dashboard
+          </Link>
         </div>
       </div>
     );
@@ -103,7 +246,11 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
 
       {/* Main Reading Area */}
       <main className="mx-auto max-w-4xl px-4 py-12 sm:px-6">
-        {/* Session Info */}
+        {error && words.length > 0 && (
+          <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-300">
+            ⚠️ {error}
+          </div>
+        )}
         <div className="mb-8 grid gap-3 sm:grid-cols-3">
           <div className="rounded-xl border border-white/[0.07] bg-[rgba(13,13,18,0.86)] p-4">
             <p className="text-xs text-zinc-500 uppercase tracking-wider">
@@ -233,12 +380,15 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
               You've finished reading this session. Great job!
             </p>
             <div className="mt-4 flex gap-3 justify-center">
-              <Link
-                href="/dashboard"
+              <button
+                onClick={() => {
+                  useUploadStore.getState().clearPendingFile();
+                  router.replace("/dashboard");
+                }}
                 className="rounded-lg bg-linear-to-r from-amber-500 to-orange-600 px-4 py-2 font-semibold text-white transition-all hover:from-amber-400 hover:to-orange-500"
               >
                 Back to Dashboard
-              </Link>
+              </button>
             </div>
           </div>
         )}
@@ -246,3 +396,4 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
     </div>
   );
 }
+

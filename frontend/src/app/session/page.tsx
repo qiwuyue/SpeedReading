@@ -5,24 +5,53 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuthSession } from "@/lib/supabase/use-auth-session";
 import { showToast } from "@/lib/toast-store";
+import { useUploadStore } from "@/lib/store/upload-store";
 
 export default function SessionPage() {
   const router = useRouter();
   const { status, profile, session } = useAuthSession();
   const [isStarting, setIsStarting] = useState(false);
-  console.log("Session page auth status:", status, "profile:", profile);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasFile, setHasFile] = useState(false);
+  const { pendingFile, pendingFileName } = useUploadStore();
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.replace("/login");
+      return;
     }
-  }, [router, status]);
+
+    if (status === "loading") {
+      return;
+    }
+
+    // Check if file exists in Zustand store
+    if (!pendingFile || !pendingFileName) {
+      // No file found, redirect to dashboard
+      showToast({
+        message: "No file found. Please upload a file first.",
+        variant: "error",
+      });
+
+      router.replace("/dashboard");
+      return;
+    }
+
+    setHasFile(true);
+    setIsLoading(false);
+  }, [router, status, pendingFile, pendingFileName]);
 
   const handleStartReading = async () => {
     try {
       setIsStarting(true);
 
       // Get the auth token from session
-      console.log("Starting session with auth status:", status, "session:", session);
+      console.log(
+        "Starting session with auth status:",
+        status,
+        "session:",
+        session,
+      );
       const token = session?.access_token;
       if (!token) {
         showToast({
@@ -32,11 +61,8 @@ export default function SessionPage() {
         return;
       }
 
-      // Get the file from sessionStorage
-      const fileBase64 = sessionStorage.getItem("pendingFile");
-      const fileName = sessionStorage.getItem("pendingFileName");
-
-      if (!fileBase64 || !fileName) {
+      // Use file from Zustand store
+      if (!pendingFile || !pendingFileName) {
         showToast({
           message: "No file found. Please upload a file first.",
           variant: "error",
@@ -53,8 +79,8 @@ export default function SessionPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          documentName: fileName,
-          file: fileBase64,
+          documentName: pendingFileName,
+          file: pendingFile,
         }),
       });
 
@@ -64,12 +90,8 @@ export default function SessionPage() {
 
       const { sessionId } = await response.json();
 
-      // Clear sessionStorage
-      sessionStorage.removeItem("pendingFile");
-      sessionStorage.removeItem("pendingFileName");
-
       // Navigate to the session page with the session ID
-      router.push(`/sessions/${sessionId}`);
+      router.push(`/session/${sessionId}`);
     } catch (error) {
       console.log("Error starting session:", error);
       showToast({
@@ -80,11 +102,21 @@ export default function SessionPage() {
     }
   };
 
-  if (status === "loading") {
+  if (status === "loading" || isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#09090b] px-4 text-white">
         <div className="rounded-2xl border border-white/8 bg-[rgba(13,13,18,0.9)] px-6 py-5 text-sm text-zinc-400 shadow-2xl shadow-black/30">
-          Loading reading session...
+          Preparing your reading session...
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasFile) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#09090b] px-4 text-white">
+        <div className="rounded-2xl border border-white/8 bg-[rgba(13,13,18,0.9)] px-6 py-5 text-sm text-zinc-400 shadow-2xl shadow-black/30">
+          Redirecting...
         </div>
       </div>
     );
