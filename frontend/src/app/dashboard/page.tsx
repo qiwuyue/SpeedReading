@@ -6,8 +6,9 @@ import { useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useAuthSession } from "@/lib/supabase/use-auth-session";
 import { showToast } from "@/lib/toast-store";
-import { FocusMode } from "@/lib/supabase/users";
+import { FocusMode, isAnonymousUser } from "@/lib/supabase/users";
 import { UploadFile } from "@/components/ui/upload-file";
+import ConvertAnonModal from "@/app/ui/convert-anon-modal";
 
 const MOCK_STATS = [
   { label: "Total sessions", value: "18", detail: "+4 this week" },
@@ -49,10 +50,12 @@ export default function DashboardPage() {
     user,
   } = useAuthSession();
   const [authError, setAuthError] = useState("");
+  const [convertModalOpen, setConvertModalOpen] = useState(false);
   const [displayNameInput, setDisplayNameInput] = useState("");
   const [displayNameModalOpen, setDisplayNameModalOpen] = useState(false);
   const [focusModeInput, setFocusModeInput] = useState<FocusMode | null>(null);
   const [focusModeModalOpen, setFocusModeModalOpen] = useState(false);
+  const [isAnon, setIsAnon] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
@@ -128,6 +131,23 @@ export default function DashboardPage() {
   useEffect(() => {
     if (status === "unauthenticated") router.replace("/login");
   }, [router, status]);
+
+  useEffect(() => {
+    // Check if user is anonymous
+    const checkAnonStatus = async () => {
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const isAnonUser = await isAnonymousUser(supabase);
+        setIsAnon(isAnonUser);
+      } catch (err) {
+        console.error("Failed to check anonymous status:", err);
+      }
+    };
+
+    if (user) {
+      checkAnonStatus();
+    }
+  }, [user]);
 
   useEffect(() => {
     setDisplayNameInput(profile?.display_name ?? "");
@@ -553,6 +573,21 @@ export default function DashboardPage() {
                   </span>
                 </button>
               ))}
+
+              {isAnon && (
+                <button
+                  type="button"
+                  onClick={() => setConvertModalOpen(true)}
+                  className="rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-4 text-left transition-all hover:border-green-400/50 hover:bg-green-500/15"
+                >
+                  <span className="text-sm font-semibold text-green-200">
+                    ✨ Create Account
+                  </span>
+                  <span className="mt-1 block text-sm text-green-100/70">
+                    Convert to permanent login
+                  </span>
+                </button>
+              )}
             </div>
           </section>
 
@@ -918,6 +953,11 @@ export default function DashboardPage() {
           </div>
         </div>
       ) : null}
+
+      <ConvertAnonModal
+        isOpen={convertModalOpen}
+        onClose={() => setConvertModalOpen(false)}
+      />
     </div>
   );
 }
