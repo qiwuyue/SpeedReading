@@ -3,20 +3,19 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { use } from "react";
 import { useAuthSession } from "@/lib/supabase/use-auth-session";
 import { showToast } from "@/lib/toast-store";
 import { useUploadStore } from "@/lib/store/upload-store";
 
 type SessionPageProps = {
-  params: Promise<{
+  params: {
     id: string;
-  }>;
+  };
 };
 
 export default function ReadingSessionPage({ params }: SessionPageProps) {
   const router = useRouter();
-  const { id: sessionId } = use(params);
+  const { id: sessionId } = params;
   const { status, profile, session } = useAuthSession();
   const [isLoading, setIsLoading] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
