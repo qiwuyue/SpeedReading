@@ -3,7 +3,7 @@
 import type { Session, User } from '@supabase/supabase-js';
 import { create } from 'zustand';
 import { createSupabaseBrowserClient } from './client';
-import { getUserProfile, type UserProfile } from './users';
+import { getUserProfile, type UserProfile, FocusMode } from './users';
 
 export type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 
@@ -17,6 +17,7 @@ type AuthState = {
   user: User | null;
   setAuthError: (error: string) => void;
   updateDefaultWpm: (wpm: number) => Promise<void>;
+  updateFocusMode: (mode: FocusMode) => Promise<void>;
   updateDisplayName: (displayName: string) => Promise<void>;
 };
 
@@ -74,6 +75,40 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   profileError: '',
   profileLoading: false,
   session: null,
+  updateFocusMode: async (mode) => {
+    const { profile, session, user } = get();
+    
+    if (!user || !session) {
+      throw new Error('You need to be logged in to update your profile.');
+    }
+
+    const res = await fetch('/api/profile', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ focusMode: mode }),
+    });
+    
+    if (!res.ok) {
+      const data = (await res.json()) as { error?: string };
+      throw new Error(data.error ?? 'Failed to update focus mode.');
+    }
+
+    set({
+      profile: profile
+        ? { ...profile, focus_mode: mode }
+        : {
+            default_wpm: 250,
+            display_name: null,
+            email: user.email ?? null,
+            focus_mode: FocusMode.HIGHLIGHT,
+            id: user.id,
+          },
+      profileError: "",
+    });
+  },
   status: 'loading',
   user: null,
   setAuthError: (authError) => set({ authError }),
@@ -105,7 +140,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             default_wpm: wpm,
             display_name: null,
             email: user.email ?? null,
-            focus_mode: 'highlight',
+            focus_mode: FocusMode.HIGHLIGHT,
             id: user.id,
           },
       profileError: '',
@@ -139,7 +174,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             default_wpm: 250,
             display_name: displayName,
             email: user.email ?? null,
-            focus_mode: 'highlight',
+            focus_mode: FocusMode.HIGHLIGHT,
             id: user.id,
           },
       profileError: '',
