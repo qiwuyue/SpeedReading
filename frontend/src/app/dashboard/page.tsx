@@ -32,7 +32,7 @@ type ReadingSessionAnalyticsRow = {
   words_read: number | null;
   achieved_wpm: number | null;
   duration_seconds?: number | null;
-  status: string | null;
+  completed: boolean | null;
   created_at: string | null;
 };
 
@@ -103,24 +103,35 @@ const getDateKey = (value: string | null) => {
   return date.toISOString().slice(0, 10);
 };
 
-const getWeekStart = () => {
+const getRollingWeekStart = () => {
   const date = new Date();
   date.setHours(0, 0, 0, 0);
-  date.setDate(date.getDate() - date.getDay());
+  date.setDate(date.getDate() - 6);
   return date;
 };
 
 // A streak means consecutive calendar days with at least one reading session.
-// Today must have a session to produce a non-zero streak.
+// If the user has not read yet today, yesterday can still anchor the streak;
+// this avoids resetting a valid streak to 0 at midnight before today's read.
 const buildCurrentStreak = (sessions: ReadingSessionAnalyticsRow[]) => {
   const activeDays = new Set(
     sessions
       .map((session) => getDateKey(session.created_at))
       .filter((dateKey): dateKey is string => Boolean(dateKey)),
   );
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const todayKey = today.toISOString().slice(0, 10);
+  const yesterdayKey = yesterday.toISOString().slice(0, 10);
+
+  if (!activeDays.has(todayKey) && !activeDays.has(yesterdayKey)) {
+    return 0;
+  }
+
   let streak = 0;
-  const cursor = new Date();
-  cursor.setHours(0, 0, 0, 0);
+  const cursor = activeDays.has(todayKey) ? today : yesterday;
 
   while (activeDays.has(cursor.toISOString().slice(0, 10))) {
     streak += 1;
@@ -137,7 +148,7 @@ const buildDashboardStats = (
   sessions: ReadingSessionAnalyticsRow[],
   checks: ComprehensionCheckAnalyticsRow[],
 ): DashboardStat[] => {
-  const weekStart = getWeekStart();
+  const weekStart = getRollingWeekStart();
   const weeklySessions = sessions.filter((session) => {
     if (!session.created_at) return false;
     return new Date(session.created_at) >= weekStart;
@@ -156,12 +167,12 @@ const buildDashboardStats = (
     {
       label: "Total sessions",
       value: String(sessions.length),
-      detail: `${weeklySessions.length} this week`,
+      detail: `${weeklySessions.length} last 7 days`,
     },
     {
       label: "Weekly reading",
       value: `${formatCompactNumber(weeklyWords)} words`,
-      detail: "this week",
+      detail: "last 7 days",
     },
     {
       label: "Comprehension",
@@ -210,9 +221,7 @@ const buildAnalyticsData = (
         0,
       ),
       averageWpm: averageWpm === null ? 0 : Math.round(averageWpm),
-      completedSessions: sessions.filter(
-        (session) => session.status === "completed",
-      ).length,
+      completedSessions: sessions.filter((session) => session.completed).length,
       averageQuizScore:
         averageQuizScore === null ? null : Math.round(averageQuizScore),
     },
@@ -309,7 +318,7 @@ export default function DashboardPage() {
           .from("reading_sessions")
           // These are the only reading session columns needed for the current
           // dashboard cards and ProgressAnalytics charts.
-          .select("id, words_read, achieved_wpm, status, created_at")
+          .select("id, words_read, achieved_wpm, completed, created_at")
           .eq("user_id", currentUser.id)
           .order("created_at", { ascending: true });
 
