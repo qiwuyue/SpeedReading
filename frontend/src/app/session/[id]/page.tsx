@@ -1,11 +1,11 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState, use } from "react";
-import { useAuthSession } from "@/lib/supabase/use-auth-session";
-import { showToast } from "@/lib/toast-store";
-import { useUploadStore } from "@/lib/store/upload-store";
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState, use } from 'react';
+import { useAuthSession } from '@/lib/supabase/use-auth-session';
+import { showToast } from '@/lib/toast-store';
+import { useUploadStore } from '@/lib/store/upload-store';
 
 type SessionPageProps = {
   params: Promise<{
@@ -24,14 +24,13 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
   const [words, setWords] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch session and file from API
   useEffect(() => {
-    if (status === "unauthenticated") {
-      router.replace("/login");
+    if (status === 'unauthenticated') {
+      router.replace('/login');
       return;
     }
 
-    if (status !== "authenticated" || !session?.access_token) {
+    if (status !== 'authenticated' || !session?.access_token) {
       return;
     }
 
@@ -47,136 +46,99 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
           setError(`Failed to load session: ${response.statusText}`);
           showToast({
             message: `Failed to load session: ${response.statusText}`,
-            variant: "error",
+            variant: 'error',
           });
           setIsLoading(false);
-          router.replace("/dashboard");
+          router.replace('/dashboard');
           return;
         }
 
         const data = await response.json();
-        console.log("Session Data:", data);
-        // if (!data.fileBytes && !data.fileError) {
-        //   setError("Session has no associated file.");
-        //   showToast({
-        //     message: "Session has no associated file.",
-        //     variant: "error",
-        //   });
-        //   setIsLoading(false);
-        //   router.replace("/dashboard");
-        //   return;
-        // }
-
-        // if (data.fileError) {
-        //   setError(`Error loading file: ${data.fileError}`);
-        //   showToast({
-        //     message: `Error loading file: ${data.fileError}`,
-        //     variant: "error",
-        //   });
-        //   setIsLoading(false);
-        //   router.replace("/dashboard");
-        //   return;
-        // }
-
+        console.log('Session Data:', data);
         setIsLoading(false);
         return { sessionId: data.session.id, fileid: data.session.file_id };
       } catch (err) {
-        console.error("Error:", err);
-        setError(err instanceof Error ? err.message : "Failed to load session");
+        console.error('Error:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load session');
         showToast({
-          message: "Failed to load session data",
-          variant: "error",
+          message: 'Failed to load session data',
+          variant: 'error',
         });
         setIsLoading(false);
       }
     };
-    const analyzeFileContent = async (content: Blob, fileName: string) => {
+
+    const analyzeFileContent = async (fileId: string) => {
       try {
-        const formdata = new FormData();
-        formdata.append("file", content, fileName)
-        console.log("formdata:", formdata);
-        const response = await fetch("/api/ai", {
-          method: "POST",
+        const response = await fetch('/api/ai', {
+          method: 'POST',
           headers: {
             Authorization: `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
           },
-          body: formdata,
+          body: JSON.stringify({ fileId }),
         });
 
         if (!response.ok) {
-          setError(`AI analysis failed: ${response.statusText}`);
+          setError(
+            'AI service is temporarily unavailable. Please try again later.',
+          );
           showToast({
-            message: `AI analysis failed: ${response.statusText}`,
-            variant: "error",
+            message:
+              'AI service is temporarily unavailable. Please try again later.',
+            variant: 'error',
           });
           return;
         }
+
         const reader = response.body?.getReader();
         if (!reader) {
-          throw new Error("Failed to read AI response stream");
+          throw new Error('Failed to read AI response stream');
         }
 
         const decoder = new TextDecoder();
-        let aiResponse = "";
+        let aiResponse = '';
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
           aiResponse += decoder.decode(value, { stream: true });
         }
 
-        console.log("Raw AI Response:", aiResponse);
-        setWords(aiResponse.split(/\s+/));
-        //const parsed = JSON.parse(aiResponse);
-        // if (parsed.error) {
-        //   setError(`AI analysis error: ${parsed.error}`);
-        //   showToast({
-        //     message: `AI analysis error: ${parsed.error}`,
-        //     variant: "error",
-        //   });
-        // }
+        console.log('Raw AI Response:', aiResponse);
 
-        //const text = parsed.result.text as string;
-        //setWords(text.split(/\s+/));
+        // Parse SSE events and extract text from all chunks
+        const lines = aiResponse
+          .split('\n')
+          .filter((l) => l.startsWith('data:'));
+        let allWords: string[] = [];
+        for (const line of lines) {
+          const data = line.replace('data:', '').trim();
+          if (data === '[DONE]') break;
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.data?.text) {
+              allWords = [...allWords, ...parsed.data.text.split(/\s+/)];
+            }
+          } catch {
+            // skip malformed lines
+          }
+        }
+        setWords(allWords);
       } catch (err) {
-        console.error("AI Analysis Error:", err);
-        setError(err instanceof Error ? err.message : "AI analysis failed");
+        console.error('AI Analysis Error:', err);
+        setError(err instanceof Error ? err.message : 'AI analysis failed');
         showToast({
-          message: "Failed to analyze file content",
-          variant: "error",
+          message: 'Failed to analyze file content',
+          variant: 'error',
         });
       }
     };
 
-    async function getFileData(fileId: string) {
-      console.log("Fetching file data for file ID:", fileId);
-      const response = await fetch(`/api/files?id=${fileId}`, {
-        headers: {
-          Authorization: `Bearer ${session?.access_token}`,
-        },
-      });
-
-      if (!response.ok) {
-        setError(`Failed to load file: ${response.statusText}`);
-        showToast({
-          message: `Failed to load file: ${response.statusText}`,
-          variant: "error",
-        });
-        return;
-      }
-
-      const data = await response.blob();
-      return data
-    }
-
     const resolver = async () => {
-      const session = await fetchSessionData();
-      if (session) {
-        console.log("Session fetched successfully:", session);
-        const file = await getFileData(session.fileid);
-        if (file) {
-          await analyzeFileContent(file, session.fileid);
-        }
-
+      const sessionData = await fetchSessionData();
+      if (sessionData) {
+        console.log('Session fetched successfully:', sessionData);
+        await analyzeFileContent(sessionData.fileid);
       }
     };
 
@@ -198,7 +160,7 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
     return () => clearTimeout(timer);
   }, [currentWordIndex, isPaused, wpm, words.length]);
 
-  if (isLoading || status === "loading") {
+  if (isLoading || status === 'loading') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#09090b] px-4 text-white">
         <div className="rounded-2xl border border-white/8 bg-[rgba(13,13,18,0.9)] px-6 py-5 text-sm text-zinc-400 shadow-2xl shadow-black/30">
@@ -256,11 +218,8 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
           <div className="flex items-center gap-2">
             <button
               onClick={() => {
-                // update session status to "completed" in the backend
-                // make a function to call the API to update session status
-                //updateSessionStatus(sessionId, "completed", session?.access_token || "")
                 useUploadStore.getState().clearPendingFile();
-                router.replace("/dashboard");
+                router.replace('/dashboard');
               }}
               className="rounded-lg border border-white/10 px-3 py-2 text-sm font-medium text-zinc-300 transition-all hover:border-white/20 hover:bg-white/5 hover:text-white sm:px-4"
             >
@@ -292,7 +251,7 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
               {profile?.focus_mode
                 ? profile.focus_mode.charAt(0).toUpperCase() +
                   profile.focus_mode.slice(1)
-                : "Highlight"}
+                : 'Highlight'}
             </p>
           </div>
           <div className="rounded-xl border border-white/[0.07] bg-[rgba(13,13,18,0.86)] p-4">
@@ -321,10 +280,10 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
                       key={index}
                       className={`transition-all duration-200 ${
                         index === currentWordIndex
-                          ? "text-amber-400 scale-110"
+                          ? 'text-amber-400 scale-110'
                           : index < currentWordIndex
-                            ? "text-zinc-500"
-                            : "text-white/60"
+                          ? 'text-zinc-500'
+                          : 'text-white/60'
                       }`}
                     >
                       {word}
@@ -341,7 +300,9 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
                     <div
                       className="h-full rounded-full bg-linear-to-r from-amber-500 to-orange-600 transition-all duration-300"
                       style={{
-                        width: `${((currentWordIndex + 1) / words.length) * 100}%`,
+                        width: `${
+                          ((currentWordIndex + 1) / words.length) * 100
+                        }%`,
                       }}
                     />
                   </div>
@@ -354,7 +315,7 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
                       onClick={() => setIsPaused(!isPaused)}
                       className="flex-1 rounded-lg bg-linear-to-r from-amber-500 to-orange-600 px-4 py-2 font-semibold text-white transition-all hover:from-amber-400 hover:to-orange-500 sm:flex-none sm:px-6"
                     >
-                      {isPaused ? "Resume" : "Pause"}
+                      {isPaused ? 'Resume' : 'Pause'}
                     </button>
                     <button
                       onClick={() =>
@@ -417,7 +378,7 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
               <button
                 onClick={() => {
                   useUploadStore.getState().clearPendingFile();
-                  router.replace("/dashboard");
+                  router.replace('/dashboard');
                 }}
                 className="rounded-lg bg-linear-to-r from-amber-500 to-orange-600 px-4 py-2 font-semibold text-white transition-all hover:from-amber-400 hover:to-orange-500"
               >

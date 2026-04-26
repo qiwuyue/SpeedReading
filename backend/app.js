@@ -1,9 +1,8 @@
-const express = require("express");
-const cors = require("cors");
-const { createClient } = require("@supabase/supabase-js");
-const dotenv = require("dotenv");
-const { PDFParse } = require("pdf-parse");
-
+const express = require('express');
+const cors = require('cors');
+const { createClient } = require('@supabase/supabase-js');
+const dotenv = require('dotenv');
+const pdfParse = require('pdf-parse');
 dotenv.config();
 
 const app = express();
@@ -18,13 +17,18 @@ const supabase =
     : null;
 
 function chunkText(text, wordsPerChunk = 200) {
-  const words = text.trim().split(/\s+/).filter(Boolean);
-  const chunks = [];
-  console.log(`Total words extracted: ${words.length}`, words);
-  for (let i = 0; i < words.length; i += wordsPerChunk) {
-    chunks.push(words.slice(i, i + wordsPerChunk).join(" "));
-  }
+  // Insert spaces before capital letters that follow lowercase (CamelCase words merged)
+  const normalized = text
+    .replace(/([a-z,\.])([A-Z])/g, '$1 $2') // "faintly,Shop" → "faintly, Shop"
+    .replace(/([a-zA-Z])(\d)/g, '$1 $2') // letters followed by numbers
+    .replace(/(\d)([a-zA-Z])/g, '$1 $2'); // numbers followed by letters
 
+  const words = normalized.trim().split(/\s+/).filter(Boolean);
+  const chunks = [];
+  console.log(`Total words extracted: ${words.length}`);
+  for (let i = 0; i < words.length; i += wordsPerChunk) {
+    chunks.push(words.slice(i, i + wordsPerChunk).join(' '));
+  }
   return chunks;
 }
 
@@ -40,43 +44,39 @@ function isPdfBytes(inputBuffer) {
   if (!Buffer.isBuffer(inputBuffer) || inputBuffer.length === 0) {
     return false;
   }
-
-  const pdfSignature = inputBuffer.subarray(0, 5).toString("utf8");
-  return pdfSignature === "%PDF-";
+  const pdfSignature = inputBuffer.subarray(0, 5).toString('utf8');
+  return pdfSignature === '%PDF-';
 }
-
 
 async function extractPdfText(pdfBuffer) {
-  try {
-   	const parser = new PDFParse(pdfBuffer);
-    return (await parser.getText()).text || "";
-  } catch {
-    console.warn("pdf-parse failed, falling back to basic PDF text extraction");
-  }
+  const data = await pdfParse(pdfBuffer);
+  console.log(
+    `Pages: ${data.numpages}, extracted text length: ${data.text.length}`,
+  );
+  return data.text || '';
 }
-
 async function requireSupabaseAuth(req, res, next) {
   if (!supabase) {
     return res.status(500).json({
       error:
-        "Supabase is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY).",
+        'Supabase is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY).',
     });
   }
 
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Missing Bearer token" });
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Missing Bearer token' });
   }
 
-  const token = authHeader.split(" ")[1];
+  const token = authHeader.split(' ')[1];
   if (!token) {
-    return res.status(401).json({ error: "Missing JWT token" });
+    return res.status(401).json({ error: 'Missing JWT token' });
   }
 
   const { data, error } = await supabase.auth.getUser(token);
 
   if (error || !data?.user) {
-    return res.status(401).json({ error: "Invalid or expired token" });
+    return res.status(401).json({ error: 'Invalid or expired token' });
   }
 
   req.user = data.user;
@@ -85,54 +85,85 @@ async function requireSupabaseAuth(req, res, next) {
 
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || "*",
+    origin: process.env.CORS_ORIGIN || '*',
   }),
 );
-app.use(express.json());
 
-app.get("/", (req, res) => {
+// Skip global JSON parsing for /extract-text so express.raw can handle it cleanly
+app.use((req, res, next) => {
+  if (req.path === '/extract-text') return next();
+  express.json()(req, res, next);
+});
+
+app.get('/', (req, res) => {
   res.json({
-    message: "SpeedReading backend is running",
-    status: "ok",
+    message: 'SpeedReading backend is running',
+    status: 'ok',
   });
 });
 
 app.post(
-  "/extract-text",
+  '/extract-text',
+  express.raw({ type: '*/*', limit: '20mb' }),
+  (req, res, next) => {
+    console.log('--- DEBUG /extract-text ---');
+    console.log(
+      'Body type:',
+      typeof req.body,
+      '| Is Buffer:',
+      Buffer.isBuffer(req.body),
+    );
+    console.log('Body length:', req.body?.length);
+    console.log(
+      'First 10 bytes (utf8):',
+      req.body?.subarray(0, 10).toString('utf8'),
+    );
+    console.log(
+      'First 10 bytes (hex):',
+      req.body?.subarray(0, 10).toString('hex'),
+    );
+    console.log('---------------------------');
+    next();
+  },
   requireSupabaseAuth,
-  express.raw({ type: "*/*", limit: "20mb" }),
   async (req, res) => {
     const contentType = (
-      req.headers["content-type"] || "application/octet-stream"
+      req.headers['content-type'] || 'application/octet-stream'
     ).toLowerCase();
     const wordsPerChunk = getWordsPerChunk(req.query.wordsPerChunk);
 
-    if (!contentType.startsWith("application/pdf")) {
+    if (!contentType.startsWith('application/pdf')) {
       return res.status(415).json({
         error:
-          "Only PDF blobs are supported. Use Content-Type: application/pdf.",
+          'Only PDF blobs are supported. Use Content-Type: application/pdf.',
       });
     }
 
     if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
       return res
         .status(400)
-        .json({ error: "Input must be a non-empty PDF blob" });
+        .json({ error: 'Input must be a non-empty PDF blob' });
     }
 
+    if (!isPdfBytes(req.body)) {
+      return res
+        .status(400)
+        .json({ error: 'Buffer does not appear to be a valid PDF' });
+    }
 
-    let text = "";
+    let text = '';
 
     try {
       text = await extractPdfText(req.body);
-    } catch {
-      return res.status(400).json({ error: "Failed to parse PDF blob" });
+    } catch (err) {
+      console.error('PDF parse error:', err);
+      return res.status(400).json({ error: 'Failed to parse PDF blob' });
     }
 
     if (!text) {
       return res
         .status(400)
-        .json({ error: "Could not extract text from PDF blob" });
+        .json({ error: 'Could not extract text from PDF blob' });
     }
 
     const chunks = chunkText(text, wordsPerChunk);

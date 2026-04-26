@@ -1,30 +1,30 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { useAuthSession } from "@/lib/supabase/use-auth-session";
-import { showToast } from "@/lib/toast-store";
-import { useUploadStore } from "@/lib/store/upload-store";
-import { FocusMode, isAnonymousUser } from "@/lib/supabase/users";
-import { UploadFile } from "@/app/ui/upload-file";
-import ConvertAnonModal from "@/app/ui/convert-anon-modal";
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
+import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { useAuthSession } from '@/lib/supabase/use-auth-session';
+import { showToast } from '@/lib/toast-store';
+import { useUploadStore } from '@/lib/store/upload-store';
+import { FocusMode, isAnonymousUser } from '@/lib/supabase/users';
+import { UploadFile } from '@/app/ui/upload-file';
+import ConvertAnonModal from '@/app/ui/convert-anon-modal';
 import ProgressAnalytics, {
   type ProgressAnalyticsData,
-} from "@/app/ui/ProgressAnalytics";
+} from '@/app/ui/ProgressAnalytics';
 
 const QUICK_ACTIONS = [
-  { title: "Upload PDF", desc: "Start a reading session from a document." },
-  { title: "Try sample", desc: "Practice with curated reading material." },
-  { title: "Review progress", desc: "See trends once real sessions exist." },
+  { title: 'Upload PDF', desc: 'Start a reading session from a document.' },
+  { title: 'Try sample', desc: 'Practice with curated reading material.' },
+  { title: 'Review progress', desc: 'See trends once real sessions exist.' },
 ];
 
 const RECENT_DOCUMENTS = [
-  { title: "Productivity systems.pdf", progress: "72%", pace: "390 WPM" },
-  { title: "Deep work notes.pdf", progress: "48%", pace: "430 WPM" },
-  { title: "Research digest.pdf", progress: "100%", pace: "455 WPM" },
-  { title: "Productivity systems.pdf", progress: "72%", pace: "390 WPM" },
+  { title: 'Productivity systems.pdf', progress: '72%', pace: '390 WPM' },
+  { title: 'Deep work notes.pdf', progress: '48%', pace: '430 WPM' },
+  { title: 'Research digest.pdf', progress: '100%', pace: '455 WPM' },
+  { title: 'Productivity systems.pdf', progress: '72%', pace: '390 WPM' },
 ];
 
 type ReadingSessionAnalyticsRow = {
@@ -63,30 +63,30 @@ type DashboardStat = {
 };
 
 const EMPTY_DASHBOARD_STATS: DashboardStat[] = [
-  { label: "Total sessions", value: "0", detail: "0 this week" },
-  { label: "Weekly reading", value: "0 words", detail: "this week" },
-  { label: "Comprehension", value: "No scores", detail: "avg. quiz score" },
-  { label: "Current streak", value: "0", detail: "days" },
+  { label: 'Total sessions', value: '0', detail: '0 this week' },
+  { label: 'Weekly reading', value: '0 words', detail: 'this week' },
+  { label: 'Comprehension', value: 'No scores', detail: 'avg. quiz score' },
+  { label: 'Current streak', value: '0', detail: 'days' },
 ];
 
 // Chart labels are intentionally short because they sit on compact axes.
 const formatChartDate = (value: string | null) => {
-  if (!value) return "Unknown";
+  if (!value) return 'Unknown';
 
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Unknown";
+  if (Number.isNaN(date.getTime())) return 'Unknown';
 
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
   });
 };
 
 // Dashboard cards need a compact display for large weekly word totals.
 const formatCompactNumber = (value: number) =>
-  new Intl.NumberFormat("en-US", {
+  new Intl.NumberFormat('en-US', {
     maximumFractionDigits: value >= 1000 ? 1 : 0,
-    notation: value >= 1000 ? "compact" : "standard",
+    notation: value >= 1000 ? 'compact' : 'standard',
   }).format(value);
 
 const average = (values: number[]) => {
@@ -159,31 +159,33 @@ const buildDashboardStats = (
   );
   const quizScoreValues = checks
     .map((check) => check.score)
-    .filter((score): score is number => typeof score === "number");
+    .filter((score): score is number => typeof score === 'number');
   const averageQuizScore = average(quizScoreValues);
   const currentStreak = buildCurrentStreak(sessions);
 
   return [
     {
-      label: "Total sessions",
+      label: 'Total sessions',
       value: String(sessions.length),
       detail: `${weeklySessions.length} last 7 days`,
     },
     {
-      label: "Weekly reading",
+      label: 'Weekly reading',
       value: `${formatCompactNumber(weeklyWords)} words`,
-      detail: "last 7 days",
+      detail: 'last 7 days',
     },
     {
-      label: "Comprehension",
+      label: 'Comprehension',
       value:
-        averageQuizScore === null ? "No scores" : `${Math.round(averageQuizScore)}%`,
-      detail: "avg. quiz score",
+        averageQuizScore === null
+          ? 'No scores'
+          : `${Math.round(averageQuizScore)}%`,
+      detail: 'avg. quiz score',
     },
     {
-      label: "Current streak",
+      label: 'Current streak',
       value: String(currentStreak),
-      detail: currentStreak === 1 ? "day" : "days",
+      detail: currentStreak === 1 ? 'day' : 'days',
     },
   ];
 };
@@ -207,10 +209,10 @@ const buildAnalyticsData = (
 
   const wpmValues = sessions
     .map((session) => session.achieved_wpm)
-    .filter((wpm): wpm is number => typeof wpm === "number");
+    .filter((wpm): wpm is number => typeof wpm === 'number');
   const quizScoreValues = checks
     .map((check) => check.score)
-    .filter((score): score is number => typeof score === "number");
+    .filter((score): score is number => typeof score === 'number');
   const averageWpm = average(wpmValues);
   const averageQuizScore = average(quizScoreValues);
 
@@ -232,13 +234,13 @@ const buildAnalyticsData = (
       }),
     ),
     wpmTrend: sessions
-      .filter((session) => typeof session.achieved_wpm === "number")
+      .filter((session) => typeof session.achieved_wpm === 'number')
       .map((session) => ({
         date: formatChartDate(session.created_at),
         wpm: session.achieved_wpm ?? 0,
       })),
     quizScores: checks
-      .filter((check) => typeof check.score === "number")
+      .filter((check) => typeof check.score === 'number')
       .map((check) => ({
         date: formatChartDate(check.created_at),
         score: check.score ?? 0,
@@ -247,7 +249,7 @@ const buildAnalyticsData = (
 };
 
 const formatFocusMode = (focusMode?: FocusMode | null) => {
-  if (!focusMode) return "Highlight";
+  if (!focusMode) return 'Highlight';
   return focusMode.charAt(0).toUpperCase() + focusMode.slice(1);
 };
 
@@ -266,9 +268,9 @@ export default function DashboardPage() {
     user,
   } = useAuthSession();
   const setPendingFile = useUploadStore((state) => state.setPendingFile);
-  const [authError, setAuthError] = useState("");
+  const [authError, setAuthError] = useState('');
   const [convertModalOpen, setConvertModalOpen] = useState(false);
-  const [displayNameInput, setDisplayNameInput] = useState("");
+  const [displayNameInput, setDisplayNameInput] = useState('');
   const [displayNameModalOpen, setDisplayNameModalOpen] = useState(false);
   const [focusModeInput, setFocusModeInput] = useState<FocusMode | null>(null);
   const [focusModeModalOpen, setFocusModeModalOpen] = useState(false);
@@ -279,16 +281,17 @@ export default function DashboardPage() {
     useState<ProgressAnalyticsData>(EMPTY_ANALYTICS_DATA);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
-  const [dashboardStats, setDashboardStats] =
-    useState<DashboardStat[]>(EMPTY_DASHBOARD_STATS);
+  const [dashboardStats, setDashboardStats] = useState<DashboardStat[]>(
+    EMPTY_DASHBOARD_STATS,
+  );
   const [progressModalOpen, setProgressModalOpen] = useState(false);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [wpmModalOpen, setWpmModalOpen] = useState(false);
-  const [wpmInput, setWpmInput] = useState("");
+  const [wpmInput, setWpmInput] = useState('');
 
-  const displayName = profile?.display_name?.trim() ?? "";
-  const profileEmail = profile?.email ?? user?.email ?? "";
+  const displayName = profile?.display_name?.trim() ?? '';
+  const profileEmail = profile?.email ?? user?.email ?? '';
   const defaultWpm = profile?.default_wpm ?? 250;
   const focusMode = formatFocusMode(profile?.focus_mode);
 
@@ -308,21 +311,21 @@ export default function DashboardPage() {
           error: userError,
         } = await supabase.auth.getUser();
 
-        console.log("Progress analytics user id:", currentUser?.id);
+        console.log('Progress analytics user id:', currentUser?.id);
 
         if (userError || !currentUser) {
-          throw new Error(userError?.message ?? "Unable to load current user.");
+          throw new Error(userError?.message ?? 'Unable to load current user.');
         }
 
         const { data: sessions, error: sessionsError } = await supabase
-          .from("reading_sessions")
+          .from('reading_sessions')
           // These are the only reading session columns needed for the current
           // dashboard cards and ProgressAnalytics charts.
-          .select("id, words_read, achieved_wpm, completed, created_at")
-          .eq("user_id", currentUser.id)
-          .order("created_at", { ascending: true });
+          .select('id, words_read, achieved_wpm, completed, created_at')
+          .eq('user_id', currentUser.id)
+          .order('created_at', { ascending: true });
 
-        console.log("Progress analytics sessions:", sessions);
+        console.log('Progress analytics sessions:', sessions);
 
         if (sessionsError) {
           throw new Error(sessionsError.message);
@@ -334,13 +337,13 @@ export default function DashboardPage() {
 
         if (sessionIds.length > 0) {
           const { data: checks, error: checksError } = await supabase
-            .from("comprehension_checks")
+            .from('comprehension_checks')
             // Checks are loaded separately because they are keyed by session_id.
-            .select("session_id, score, created_at")
-            .in("session_id", sessionIds)
-            .order("created_at", { ascending: true });
+            .select('session_id, score, created_at')
+            .in('session_id', sessionIds)
+            .order('created_at', { ascending: true });
 
-          console.log("Progress analytics checks:", checks);
+          console.log('Progress analytics checks:', checks);
 
           if (checksError) {
             throw new Error(checksError.message);
@@ -348,7 +351,7 @@ export default function DashboardPage() {
 
           checkRows = (checks ?? []) as ComprehensionCheckAnalyticsRow[];
         } else {
-          console.log("Progress analytics checks:", []);
+          console.log('Progress analytics checks:', []);
         }
 
         setAnalyticsData(buildAnalyticsData(sessionRows, checkRows));
@@ -357,7 +360,7 @@ export default function DashboardPage() {
         const message =
           error instanceof Error
             ? error.message
-            : "Unable to load progress analytics.";
+            : 'Unable to load progress analytics.';
         setAnalyticsError(message);
         setAnalyticsData(EMPTY_ANALYTICS_DATA);
         setDashboardStats(EMPTY_DASHBOARD_STATS);
@@ -372,17 +375,17 @@ export default function DashboardPage() {
 
   const handleQuickAction = (actionTitle: string) => {
     switch (actionTitle) {
-      case "Upload PDF":
+      case 'Upload PDF':
         setUploadModalOpen(true);
         break;
-      case "Try sample":
+      case 'Try sample':
         showToast({
-          message: "Sample reading session coming soon!",
-          title: "Try Sample",
-          variant: "info",
+          message: 'Sample reading session coming soon!',
+          title: 'Try Sample',
+          variant: 'info',
         });
         break;
-      case "Review progress":
+      case 'Review progress':
         setProgressModalOpen(true);
         break;
       default:
@@ -393,26 +396,35 @@ export default function DashboardPage() {
   const handleFileUpload = async (file: File) => {
     setIsUploading(true);
     try {
-      const fileData = await file.bytes();
-      setPendingFile(fileData, file.name);
-      showToast({
-        message: `${file.name} uploaded successfully. Starting session...`,
+      const formData = new FormData();
+      formData.append('file', file, file.name);
+      formData.append('documentName', file.name);
+      formData.append('pagesLength', '1'); // or compute real page count
+
+      const token = (await createSupabaseBrowserClient().auth.getSession()).data
+        .session?.access_token;
+
+      const response = await fetch('/api/sessions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
       });
-      return router.push("/session");
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+
+      router.push(`/session/${data.sessionId}`);
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to upload file";
       showToast({
-        message: errorMessage,
-        title: "Upload failed",
-        variant: "error",
+        message: error instanceof Error ? error.message : 'Failed to upload',
+        variant: 'error',
       });
       setIsUploading(false);
     }
   };
 
   useEffect(() => {
-    if (status === "unauthenticated") router.replace("/login");
+    if (status === 'unauthenticated') router.replace('/login');
   }, [router, status]);
 
   useEffect(() => {
@@ -423,7 +435,7 @@ export default function DashboardPage() {
         const isAnonUser = await isAnonymousUser(supabase);
         setIsAnon(isAnonUser);
       } catch (err) {
-        console.error("Failed to check anonymous status:", err);
+        console.error('Failed to check anonymous status:', err);
       }
     };
 
@@ -433,7 +445,7 @@ export default function DashboardPage() {
   }, [user]);
 
   useEffect(() => {
-    setDisplayNameInput(profile?.display_name ?? "");
+    setDisplayNameInput(profile?.display_name ?? '');
   }, [profile?.display_name]);
 
   useEffect(() => {
@@ -442,8 +454,8 @@ export default function DashboardPage() {
     setAuthError(profileError);
     showToast({
       message: profileError,
-      title: "Profile unavailable",
-      variant: "error",
+      title: 'Profile unavailable',
+      variant: 'error',
     });
   }, [profileError]);
 
@@ -451,9 +463,9 @@ export default function DashboardPage() {
     if (!isAuthenticated) return;
 
     let isMounted = true;
-    let channel:
-      | ReturnType<ReturnType<typeof createSupabaseBrowserClient>["channel"]>
-      | null = null;
+    let channel: ReturnType<
+      ReturnType<typeof createSupabaseBrowserClient>['channel']
+    > | null = null;
 
     const setupAnalytics = async () => {
       await loadAnalytics({ showLoading: progressModalOpen });
@@ -472,11 +484,11 @@ export default function DashboardPage() {
         // Reading sessions are filtered by user_id, so other users' activity
         // will not trigger this dashboard to refresh.
         .on(
-          "postgres_changes",
+          'postgres_changes',
           {
-            event: "*",
-            schema: "public",
-            table: "reading_sessions",
+            event: '*',
+            schema: 'public',
+            table: 'reading_sessions',
             filter: `user_id=eq.${currentUser.id}`,
           },
           () => loadAnalytics(),
@@ -485,11 +497,11 @@ export default function DashboardPage() {
         // any check change triggers a refetch. The refetch filters checks back
         // down to this user's session ids.
         .on(
-          "postgres_changes",
+          'postgres_changes',
           {
-            event: "*",
-            schema: "public",
-            table: "comprehension_checks",
+            event: '*',
+            schema: 'public',
+            table: 'comprehension_checks',
           },
           () => loadAnalytics(),
         )
@@ -512,10 +524,10 @@ export default function DashboardPage() {
     try {
       const supabase = createSupabaseBrowserClient();
       await supabase.auth.signOut();
-      router.push("/");
+      router.push('/');
     } catch (error) {
       setAuthError(
-        error instanceof Error ? error.message : "Unable to log out right now.",
+        error instanceof Error ? error.message : 'Unable to log out right now.',
       );
       setLoggingOut(false);
     }
@@ -525,24 +537,24 @@ export default function DashboardPage() {
     event.preventDefault();
 
     if (!focusModeInput) {
-      const message = "Focus mode must be selected.";
-      showToast({ message, title: "Profile update failed", variant: "error" });
+      const message = 'Focus mode must be selected.';
+      showToast({ message, title: 'Profile update failed', variant: 'error' });
       return;
     }
     const nextFocusMode = focusModeInput as FocusMode;
-    setAuthError("");
+    setAuthError('');
 
     if (!user) {
-      const message = "You need to be logged in to update your profile.";
+      const message = 'You need to be logged in to update your profile.';
       setAuthError(message);
-      showToast({ message, title: "Profile update failed", variant: "error" });
+      showToast({ message, title: 'Profile update failed', variant: 'error' });
       return;
     }
 
     if (!nextFocusMode) {
-      const message = "Focus mode must be selected.";
+      const message = 'Focus mode must be selected.';
       setAuthError(message);
-      showToast({ message, title: "Profile update failed", variant: "error" });
+      showToast({ message, title: 'Profile update failed', variant: 'error' });
       return;
     }
 
@@ -554,17 +566,17 @@ export default function DashboardPage() {
       setFocusModeModalOpen(false);
       showToast({
         message: `Focus mode set to ${formatFocusMode(nextFocusMode)}.`,
-        title: "Profile saved",
-        variant: "success",
+        title: 'Profile saved',
+        variant: 'success',
       });
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
-          : "Unable to update your focus mode right now.";
+          : 'Unable to update your focus mode right now.';
 
       setAuthError(message);
-      showToast({ message, title: "Profile update failed", variant: "error" });
+      showToast({ message, title: 'Profile update failed', variant: 'error' });
     } finally {
       setProfileSaving(false);
     }
@@ -574,19 +586,19 @@ export default function DashboardPage() {
     event.preventDefault();
 
     const wpm = parseInt(wpmInput, 10);
-    setAuthError("");
+    setAuthError('');
 
     if (!user) {
-      const message = "You need to be logged in to update your profile.";
+      const message = 'You need to be logged in to update your profile.';
       setAuthError(message);
-      showToast({ message, title: "Profile update failed", variant: "error" });
+      showToast({ message, title: 'Profile update failed', variant: 'error' });
       return;
     }
 
     if (!wpmInput || isNaN(wpm) || wpm < 100 || wpm > 1000) {
-      const message = "Please enter a WPM value between 100 and 1000.";
+      const message = 'Please enter a WPM value between 100 and 1000.';
       setAuthError(message);
-      showToast({ message, title: "Profile update failed", variant: "error" });
+      showToast({ message, title: 'Profile update failed', variant: 'error' });
       return;
     }
 
@@ -597,16 +609,16 @@ export default function DashboardPage() {
       setWpmModalOpen(false);
       showToast({
         message: `Default pace set to ${wpm} WPM.`,
-        title: "Profile saved",
-        variant: "success",
+        title: 'Profile saved',
+        variant: 'success',
       });
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
-          : "Unable to update your reading pace right now.";
+          : 'Unable to update your reading pace right now.';
       setAuthError(message);
-      showToast({ message, title: "Profile update failed", variant: "error" });
+      showToast({ message, title: 'Profile update failed', variant: 'error' });
     } finally {
       setProfileSaving(false);
     }
@@ -616,26 +628,26 @@ export default function DashboardPage() {
     event.preventDefault();
 
     const nextDisplayName = displayNameInput.trim();
-    setAuthError("");
+    setAuthError('');
 
     if (!user) {
-      const message = "You need to be logged in to update your profile.";
+      const message = 'You need to be logged in to update your profile.';
       setAuthError(message);
-      showToast({ message, title: "Profile update failed", variant: "error" });
+      showToast({ message, title: 'Profile update failed', variant: 'error' });
       return;
     }
 
     if (!nextDisplayName) {
-      const message = "Display name cannot be empty.";
+      const message = 'Display name cannot be empty.';
       setAuthError(message);
-      showToast({ message, title: "Profile update failed", variant: "error" });
+      showToast({ message, title: 'Profile update failed', variant: 'error' });
       return;
     }
 
     if (nextDisplayName.length > 100) {
-      const message = "Display name must be 100 characters or fewer.";
+      const message = 'Display name must be 100 characters or fewer.';
       setAuthError(message);
-      showToast({ message, title: "Profile update failed", variant: "error" });
+      showToast({ message, title: 'Profile update failed', variant: 'error' });
       return;
     }
 
@@ -646,18 +658,18 @@ export default function DashboardPage() {
       setDisplayNameInput(nextDisplayName);
       setDisplayNameModalOpen(false);
       showToast({
-        message: "Display name updated.",
-        title: "Profile saved",
-        variant: "success",
+        message: 'Display name updated.',
+        title: 'Profile saved',
+        variant: 'success',
       });
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
-          : "Unable to update your display name right now.";
+          : 'Unable to update your display name right now.';
 
       setAuthError(message);
-      showToast({ message, title: "Profile update failed", variant: "error" });
+      showToast({ message, title: 'Profile update failed', variant: 'error' });
     } finally {
       setProfileSaving(false);
     }
@@ -714,7 +726,7 @@ export default function DashboardPage() {
               disabled={loggingOut}
               className="rounded-lg border border-white/10 px-3 py-2 text-sm font-medium text-zinc-300 transition-all hover:border-white/20 hover:bg-white/5r:text-white disabled:cursor-not-allowed disabled:opacity-60 sm:px-4"
             >
-              {loggingOut ? "Logging out..." : "Log out"}
+              {loggingOut ? 'Logging out...' : 'Log out'}
             </button>
           </div>
         </div>
@@ -737,13 +749,13 @@ export default function DashboardPage() {
                 </h1>
                 <div className="flex items-center gap-2 pb-1">
                   <span className="bg-linear-to-r from-amber-300 to-orange-300 bg-clip-text text-3xl font-extrabold tracking-tight text-transparent sm:text-4xl lg:text-5xl">
-                    {displayName || "reader"}
+                    {displayName || 'reader'}
                   </span>
                   <button
                     type="button"
                     onClick={() => {
                       setDisplayNameInput(displayName);
-                      setAuthError("");
+                      setAuthError('');
                       setDisplayNameModalOpen(true);
                     }}
                     className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-zinc-400 transition-all hover:border-amber-400/30 hover:bg-amber-500/10 hover:text-amber-200"
@@ -787,7 +799,7 @@ export default function DashboardPage() {
                       type="button"
                       onClick={() => {
                         setWpmInput(String(defaultWpm));
-                        setAuthError("");
+                        setAuthError('');
                         setWpmModalOpen(true);
                       }}
                       className="flex h-6 w-6 items-center justify-center rounded-full border border-white/10 text-zinc-400 transition-all hover:border-amber-400/30 hover:bg-amber-500/10 hover:text-amber-200"
@@ -821,7 +833,7 @@ export default function DashboardPage() {
                         setFocusModeInput(
                           profile?.focus_mode || FocusMode.HIGHLIGHT,
                         );
-                        setAuthError("");
+                        setAuthError('');
                         setFocusModeModalOpen(true);
                       }}
                       className="flex h-6 w-6 items-center justify-center rounded-full border border-white/10 text-zinc-400 transition-all hover:border-amber-400/30 hover:bg-amber-500/10 hover:text-amber-200"
@@ -875,10 +887,10 @@ export default function DashboardPage() {
             </h2>
             <div className="mt-5 space-y-4">
               {[
-                ["Display name", displayName || "Not set"],
-                ["Email", profileEmail || "Not available"],
-                ["Default WPM", `${defaultWpm}`],
-                ["Focus mode", focusMode],
+                ['Display name', displayName || 'Not set'],
+                ['Email', profileEmail || 'Not available'],
+                ['Default WPM', `${defaultWpm}`],
+                ['Focus mode', focusMode],
               ].map(([label, value]) => (
                 <div
                   key={label}
@@ -941,8 +953,8 @@ export default function DashboardPage() {
                 </h2>
                 <p className="mt-1 text-sm text-zinc-500">
                   {RECENT_DOCUMENTS.length === 0
-                    ? "Start your first reading session to see documents here."
-                    : "Mock data until document sessions are connected."}
+                    ? 'Start your first reading session to see documents here.'
+                    : 'Mock data until document sessions are connected.'}
                 </p>
               </div>
             </div>
@@ -1037,7 +1049,7 @@ export default function DashboardPage() {
                       Words per minute
                     </span>
                     <span className="text-sm font-bold text-amber-300">
-                      {wpmInput || "—"} WPM
+                      {wpmInput || '—'} WPM
                     </span>
                   </div>
                   <input
@@ -1074,7 +1086,7 @@ export default function DashboardPage() {
                   disabled={profileSaving}
                   className="h-12 rounded-xl bg-linear-to-r from-amber-500 to-orange-600 px-6 text-sm font-semibold text-white shadow-xl shadow-amber-900/35 transition-all duration-200 hover:from-amber-400 hover:to-orange-500 disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {profileSaving ? "Saving..." : "Save pace"}
+                  {profileSaving ? 'Saving...' : 'Save pace'}
                 </button>
               </form>
             </div>
@@ -1134,9 +1146,9 @@ export default function DashboardPage() {
               >
                 <div className="flex flex-col gap-3">
                   {[
-                    { value: "highlight", label: "Highlight" },
-                    { value: "dot", label: "Dot" },
-                    { value: "none", label: "None" },
+                    { value: 'highlight', label: 'Highlight' },
+                    { value: 'dot', label: 'Dot' },
+                    { value: 'none', label: 'None' },
                   ].map(({ value, label }) => (
                     <button
                       key={value}
@@ -1145,8 +1157,8 @@ export default function DashboardPage() {
                       disabled={profileSaving}
                       className={`rounded-xl border px-4 py-3 text-sm font-semibold transition-all ${
                         focusModeInput === value
-                          ? "border-amber-400/50 bg-amber-500/15 text-amber-200"
-                          : "border-white/10 bg-white/3 text-zinc-300 hover:border-amber-400/25 hover:bg-amber-500/6 hover:text-amber-200"
+                          ? 'border-amber-400/50 bg-amber-500/15 text-amber-200'
+                          : 'border-white/10 bg-white/3 text-zinc-300 hover:border-amber-400/25 hover:bg-amber-500/6 hover:text-amber-200'
                       } disabled:cursor-not-allowed disabled:opacity-70`}
                     >
                       {label}
@@ -1158,7 +1170,7 @@ export default function DashboardPage() {
                   disabled={profileSaving}
                   className="h-12 rounded-xl bg-linear-to-r from-amber-500 to-orange-600 px-6 text-sm font-semibold text-white shadow-xl shadow-amber-900/35 transition-all duration-200 hover:from-amber-400 hover:to-orange-500 disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {profileSaving ? "Saving..." : "Save mode"}
+                  {profileSaving ? 'Saving...' : 'Save mode'}
                 </button>
               </form>
             </div>
@@ -1230,7 +1242,7 @@ export default function DashboardPage() {
                   disabled={profileSaving}
                   className="h-12 rounded-xl bg-linear-to-r from-amber-500 to-orange-600 px-6 text-sm font-semibold text-white shadow-xl shadow-amber-900/35 transition-all duration-200 hover:from-amber-400 hover:to-orange-500 disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {profileSaving ? "Saving..." : "Save name"}
+                  {profileSaving ? 'Saving...' : 'Save name'}
                 </button>
               </form>
             </div>
@@ -1348,7 +1360,7 @@ export default function DashboardPage() {
               </div>
 
               <UploadFile
-                onFileSelect={(file) => console.log("Selected:", file)}
+                onFileSelect={(file) => console.log('Selected:', file)}
                 onUpload={handleFileUpload}
                 maxSize={50}
                 disabled={isUploading}
