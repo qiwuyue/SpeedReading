@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 type ProfilePatchBody = {
   displayName?: unknown;
   wpm?: unknown;
+  focusMode?: unknown;
 };
 
 export const runtime = "edge";
@@ -14,7 +15,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const token = authHeader.slice(7);
+  const token = authHeader.split(" ")[1];
   const body = (await req.json()) as ProfilePatchBody;
 
   const updates: Record<string, string | number> = {};
@@ -32,6 +33,13 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'WPM must be between 100 and 1000' }, { status: 400 });
     }
     updates.default_wpm = wpm;
+  }
+
+  if (body.focusMode !== undefined) {
+    if (typeof body.focusMode !== 'string' || !['highlight', 'dot', 'none'].includes(body.focusMode)) {
+      return NextResponse.json({ error: 'Invalid focus mode' }, { status: 400 });
+    }
+    updates.focus_mode = body.focusMode;
   }
 
   if (Object.keys(updates).length === 0) {
