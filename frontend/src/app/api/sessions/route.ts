@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     try {
       const bytes = body.file;
 
-      const fileName = `${Date.now()}-${body.documentName || "document"}.pdf`;
+      const fileName = `${Date.now()}-${body.documentName || "document"}`;
       const filePath = `${user.id}/${fileName}`;
 
       const { data: uploadData, error: uploadError } = await supabase.storage

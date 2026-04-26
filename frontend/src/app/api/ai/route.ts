@@ -1,44 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { OpenAI } from "openai";
-import { zodResponseFormat } from "openai/helpers/zod";
-const client = new OpenAI({
-  apiKey: process.env.GROQ_KEY,
-  baseURL: "https://api.groq.com/openai/v1",
-});
-
-export interface Question {
-  q: string;
-  options: [string, string, string, string];
-  answer: number;
-}
-
-export interface Chunk {
-  title: string;
-  text: string;
-  questions: Question[];
-}
-
+import { Groq } from "groq-sdk";
 import { z } from "zod";
 
-export const QuestionSchema = z.object({
-  q: z.string(),
-  options: z.tuple([z.string(), z.string(), z.string(), z.string()]),
-  answer: z.number().int().min(0).max(3),
+const client = new Groq({
+  apiKey: process.env.GROQ_KEY,
 });
-
-export const ChunkSchema = z.object({
-  title: z.string(),
-  text: z.string(),
-  questions: z.array(QuestionSchema).length(4),
-});
-
-export const AnalyzeResponseSchema = z.object({
-  chunks: z.array(ChunkSchema),
-});
-
-export interface AnalyzeResponse {
-  chunks: Chunk[];
-}
 
 const SUPPORTED_MIME_TYPES = new Set([
   "application/pdf",
@@ -46,98 +12,111 @@ const SUPPORTED_MIME_TYPES = new Set([
   "text/markdown",
 ]);
 
-const SYSTEM_PROMPT = `You are a reading-speed trainer assistant. Given the document content, do two things:
+const SYSTEM_PROMPT = `
+You are a reading-speed trainer assistant.
 
-1. Split it into 2–4 coherent chunks of roughly 150–250 words each. Each chunk should be self-contained and readable on its own.
-2. For each chunk, generate exactly 4 multiple-choice comprehension questions with 4 answer options each. Indicate the correct answer as a 0-based index.
+Split the document into 2–4 chunks (150–250 words each).
+For each chunk, generate 4 MCQs with 4 options and correct index.
 
-Return ONLY valid JSON matching this exact shape — no preamble, no markdown fences:
+Return ONLY valid JSON:
 {
   "chunks": [
     {
-      "title": "Short descriptive title",
-      "text": "The chunk text...",
+      "title": "string",
+      "text": "string",
       "questions": [
         {
-          "q": "Question text?",
-          "options": ["A", "B", "C", "D"],
+          "q": "string",
+          "options": ["A","B","C","D"],
           "answer": 0
         }
       ]
     }
   ]
-}`;
+}
+`;
 
 export async function POST(req: NextRequest) {
-  const formData = await req.formData();
-  const file = formData.get("file") as File | null;
-  const encoder = new TextEncoder();
+  try {
+    const formData = await req.formData();
+    const file = formData.get("file") as File | null;
 
-  if (!file) {
-    return NextResponse.json({ error: "No file provided." }, { status: 400 });
-  }
+    if (!file) {
+      return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    }
 
-  const mimeType = file.type || "text/plain";
-
-  if (!SUPPORTED_MIME_TYPES.has(mimeType)) {
-    return NextResponse.json(
-      { error: `Unsupported file type: ${mimeType}. Use PDF or plain text.` },
-      { status: 400 },
-    );
-  }
-
-  const arrayBuffer = await file.arrayBuffer();
-  const base64 = Buffer.from(arrayBuffer).toString("base64");
-  const fileData = `data:${file.type};base64,${base64}`;
-
-  const stream = new ReadableStream({
-    async start(controller) {
-      const openaiStream = await client.responses.parse(
-        {
-          model: "openai/gpt-oss-120b",
-          text: {
-            format: {
-              name: "analyze",
-              type: "json_object",
-              schema: zodResponseFormat(AnalyzeResponseSchema, "analyze"),
-            },
-          },
-          input: [
-            {
-              role: "system",
-              content: [{ type: "input_text", text: SYSTEM_PROMPT }],
-            },
-            {
-              role: "user",
-              content: [{ type: "input_file", file_data: fileData }],
-            },
-          ],
-        },
-        { stream: true },
+    if (!SUPPORTED_MIME_TYPES.has(file.type)) {
+      return NextResponse.json(
+        { error: `Unsupported file type: ${file.type}` },
+        { status: 400 },
       );
-      for await (const event of openaiStream.output) {
-        if (event.type === "message") {
-          controller.enqueue(encoder.encode(`data: ${event.content}\n\n`));
-        }
+    }
 
-        if (event.type === "message" && event.status === "completed") {
-          const parsed = event.content;
+    const encoder = new TextEncoder();
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const base64String = buffer.toString("base64");
+
+    // ✅ 2. Stream response correctly
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          const response = await client.chat.completions.create({
+            model: "gpt-4o",
+            messages: [
+              { role: "system", content: SYSTEM_PROMPT },
+              {
+                role: "user",
+                content: [
+                  {
+                    type: "document",
+                    document: {
+                      data: {
+                        data: base64String,
+                        mime_type: "application/pdf",
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+            stream: true,
+          });
+
+          // ✅ correct streaming iteration
+          for await (const event of response) {
+              controller.enqueue(encoder.encode(`data: ${event.choices[0].delta}\n\n`));
+
+            if (event.choices[0].finish_reason === "stop") {
+              controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+              controller.close();
+            }
+          }
+        } catch (err) {
+          const errorMessage =
+            err instanceof Error ? err.message : "An error occurred";
+
           controller.enqueue(
             encoder.encode(
-              `data: ${JSON.stringify({ done: true, result: parsed })}\n\n`,
+              `data: ${JSON.stringify({ error: errorMessage })}\n\n`,
             ),
           );
           controller.close();
         }
-      }
-    },
-  });
+      },
+    });
 
-  return new NextResponse(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    },
-  });
+    return new NextResponse(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
+  } catch (error){
+    console.log("Error in /api/ai:", error);
+    return NextResponse.json(
+      { error: "Server error" },
+      { status: 500 },
+    );
+  }
 }
