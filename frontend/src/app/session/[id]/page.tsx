@@ -2,20 +2,20 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
 import { useAuthSession } from "@/lib/supabase/use-auth-session";
 import { showToast } from "@/lib/toast-store";
 import { useUploadStore } from "@/lib/store/upload-store";
 
 type SessionPageProps = {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 };
 
 export default function ReadingSessionPage({ params }: SessionPageProps) {
   const router = useRouter();
-  const { id: sessionId } = params;
+  const { id: sessionId } = use(params);
   const { status, profile, session } = useAuthSession();
   const [isLoading, setIsLoading] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
@@ -125,6 +125,7 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
         }
 
         console.log("Raw AI Response:", aiResponse);
+        setWords(aiResponse.split(/\s+/));
         //const parsed = JSON.parse(aiResponse);
         // if (parsed.error) {
         //   setError(`AI analysis error: ${parsed.error}`);
@@ -170,6 +171,7 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
     const resolver = async () => {
       const session = await fetchSessionData();
       if (session) {
+        console.log("Session fetched successfully:", session);
         const file = await getFileData(session.fileid);
         if (file) {
           await analyzeFileContent(file, session.fileid);
@@ -252,12 +254,18 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
           </Link>
 
           <div className="flex items-center gap-2">
-            <Link
-              href="/dashboard"
+            <button
+              onClick={() => {
+                // update session status to "completed" in the backend
+                // make a function to call the API to update session status
+                //updateSessionStatus(sessionId, "completed", session?.access_token || "")
+                useUploadStore.getState().clearPendingFile();
+                router.replace("/dashboard");
+              }}
               className="rounded-lg border border-white/10 px-3 py-2 text-sm font-medium text-zinc-300 transition-all hover:border-white/20 hover:bg-white/5 hover:text-white sm:px-4"
             >
               Exit Session
-            </Link>
+            </button>
           </div>
         </div>
       </header>

@@ -42,8 +42,8 @@ export async function GET(req: NextRequest, { params }: GetSessionParams) {
 
     // Fetch session by ID and verify it belongs to the user
     const { data: session, error: sessionError } = await supabase
-      .from("sessions")
-      .select("*")
+      .from("reading_sessions")
+      .select("id, user_id, document_id, created_at, completed")
       .eq("id", sessionId)
       .eq("user_id", user.id)
       .single();
@@ -52,38 +52,17 @@ export async function GET(req: NextRequest, { params }: GetSessionParams) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
-    // let fileBytes: ArrayBuffer | null = null;
-    // let fileError = null;
-
-    // Fetch file from storage if file_id exists
-    // if (session.file_id) {
-    //   try {
-    //     const { data: fileData, error: downloadError } = await supabase.storage
-    //       .from("speed reading-documents")
-    //       .download(session.file_id);
-
-    //     if (downloadError) {
-    //       fileError = downloadError.message;
-    //     } else if (fileData) {
-    //       const buffer = await fileData.arrayBuffer();
-    //       fileBytes = Buffer.from(buffer).toString("base64");
-    //     }
-    //   } catch (err) {
-    //     fileError =
-    //       err instanceof Error ? err.message : "Failed to download file";
-    //   }
-    // }
-
     return NextResponse.json({
       session: {
         id: session.id,
         user_id: session.user_id,
-        file_id: session.file_id,
+        file_id: session.document_id,
         created_at: session.created_at,
-        status: session.status,
+        completed: session.completed,
       },
     });
   } catch (error) {
+    console.error("Error fetching session:", error);
     return NextResponse.json(
       {
         error:

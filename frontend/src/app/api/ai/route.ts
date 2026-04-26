@@ -1,36 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Groq } from "groq-sdk";
-import { z } from "zod";
+export const runtime = "nodejs";
 
-const client = new Groq({
-  apiKey: process.env.GROQ_KEY,
-});
+const client = new Groq({ apiKey: process.env.GROQ_KEY });
+const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:4000";
 
-const SUPPORTED_MIME_TYPES = new Set([
-  "application/pdf",
-  "text/plain",
-  "text/markdown",
-]);
+const SUPPORTED_MIME_TYPES = new Set(["application/pdf"]);
 
 const SYSTEM_PROMPT = `
 You are a reading-speed trainer assistant.
-
-Split the document into 2–4 chunks (150–250 words each).
-For each chunk, generate 4 MCQs with 4 options and correct index.
-
+You will receive ONE chunk of text.
+Generate 4 MCQs with 4 options and correct index for that chunk.
 Return ONLY valid JSON:
 {
-  "chunks": [
+  "title": "string",
+  "text": "string",
+  "questions": [
     {
-      "title": "string",
-      "text": "string",
-      "questions": [
-        {
-          "q": "string",
-          "options": ["A","B","C","D"],
-          "answer": 0
-        }
-      ]
+      "q": "string",
+      "options": ["A", "B", "C", "D"],
+      "answer": 0
     }
   ]
 }
@@ -40,6 +29,7 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
+    const authHeader = req.headers.get("authorization");
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -52,54 +42,120 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const encoder = new TextEncoder();
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const base64String = buffer.toString("base64");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return NextResponse.json(
+        { error: "Missing Authorization Bearer token" },
+        { status: 401 },
+      );
+    }
 
-    // ✅ 2. Stream response correctly
+    const backendResponse = await fetch(
+      `${BACKEND_URL}/extract-text?wordsPerChunk=200`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: authHeader,
+          "Content-Type": "application/pdf",
+        },
+        body: Buffer.from(await file.arrayBuffer()),
+      },
+    );
+
+    if (!backendResponse.ok) {
+      const backendError = await backendResponse.text();
+      console.error("Backend error:", backendError);
+
+      return NextResponse.json(
+        { error: backendError },
+        { status: backendResponse.status },
+      );
+    }
+
+    const extracted = (await backendResponse.json()) as {
+      text?: string;
+      chunks?: string[];
+      wordsPerChunk?: number;
+      chunkCount?: number;
+    };
+
+    const chunks = Array.isArray(extracted.chunks) ? extracted.chunks : [];
+
+    if (!chunks.length) {
+      return NextResponse.json(
+        { error: "File appears to be empty" },
+        { status: 400 },
+      );
+    }
+
+    console.log(`Split into ${chunks.length} chunks`);
+
+    const encoder = new TextEncoder();
+
     const stream = new ReadableStream({
       async start(controller) {
+        const enqueue = (data: string) => {
+          controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+        };
+
         try {
-          const response = await client.chat.completions.create({
-            model: "gpt-4o",
-            messages: [
-              { role: "system", content: SYSTEM_PROMPT },
-              {
-                role: "user",
-                content: [
-                  {
-                    type: "document",
-                    document: {
-                      data: {
-                        data: base64String,
-                        mime_type: "application/pdf",
-                      },
-                    },
-                  },
-                ],
-              },
-            ],
-            stream: true,
-          });
+          // ✅ Process each chunk separately
+          for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
 
-          // ✅ correct streaming iteration
-          for await (const event of response) {
-              controller.enqueue(encoder.encode(`data: ${event.choices[0].delta}\n\n`));
+            const response = await client.chat.completions.create({
+              model: "llama3-8b-8192",
+              messages: [
+                { role: "system", content: SYSTEM_PROMPT },
+                {
+                  role: "user",
+                  content: `Document: ${file.name}\nChunk ${i + 1} of ${chunks.length}:\n\n${chunk}`,
+                },
+              ],
+              stream: true,
+            });
 
-            if (event.choices[0].finish_reason === "stop") {
-              controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
-              controller.close();
+            let chunkResponse = "";
+
+            for await (const event of response) {
+              const delta = event.choices[0]?.delta?.content;
+              const finishReason = event.choices[0]?.finish_reason;
+
+              if (delta) {
+                chunkResponse += delta;
+              }
+
+              if (finishReason === "stop") {
+                // ✅ Send completed chunk result to client
+                try {
+                  const parsed = JSON.parse(chunkResponse);
+                  enqueue(
+                    JSON.stringify({
+                      chunkIndex: i,
+                      total: chunks.length,
+                      data: parsed,
+                    }),
+                  );
+                } catch {
+                  enqueue(
+                    JSON.stringify({
+                      chunkIndex: i,
+                      total: chunks.length,
+                      error: "Failed to parse JSON",
+                    }),
+                  );
+                }
+                break;
+              }
             }
           }
+
+          enqueue("[DONE]");
+          controller.close();
         } catch (err) {
           const errorMessage =
             err instanceof Error ? err.message : "An error occurred";
-
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({ error: errorMessage })}\n\n`,
-            ),
-          );
+          console.error("Error processing chunks:", err);
+          enqueue(JSON.stringify({ error: errorMessage }));
           controller.close();
         }
       },
@@ -112,11 +168,8 @@ export async function POST(req: NextRequest) {
         Connection: "keep-alive",
       },
     });
-  } catch (error){
-    console.log("Error in /api/ai:", error);
-    return NextResponse.json(
-      { error: "Server error" },
-      { status: 500 },
-    );
+  } catch (error) {
+    console.error("Error in /api/ai:", error);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

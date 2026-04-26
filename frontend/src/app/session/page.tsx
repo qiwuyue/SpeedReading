@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import { useAuthSession } from "@/lib/supabase/use-auth-session";
 import { showToast } from "@/lib/toast-store";
 import { useUploadStore } from "@/lib/store/upload-store";
+// import pdfjsLib from "pdfjs-dist";
+import mupdf from "mupdf"
 
 export default function SessionPage() {
   const router = useRouter();
@@ -55,6 +57,10 @@ export default function SessionPage() {
         });
         return;
       }
+      function parsePageNumbers(content: Uint8Array<ArrayBufferLike>) {
+        const doc = mupdf.Document.openDocument(content);
+        return doc.countPages()
+      }
 
       // Use file from Zustand store
       if (!pendingFile || !pendingFileName) {
@@ -65,7 +71,7 @@ export default function SessionPage() {
         setIsStarting(false);
         return;
       }
-
+      const page = await parsePageNumbers(pendingFile)
       // Call the sessions API to create a new session
       const response = await fetch("/api/sessions", {
         method: "POST",
@@ -76,6 +82,7 @@ export default function SessionPage() {
         body: JSON.stringify({
           documentName: pendingFileName,
           file: pendingFile,
+          pagesLength: page, // Placeholder value, replace with actual page count if available
         }),
       });
 
@@ -90,7 +97,7 @@ export default function SessionPage() {
     } catch (error) {
       console.log("Error starting session:", error);
       showToast({
-        message: "Failed to start reading session",
+        message: `Failed to start reading session`,
         variant: "error",
       });
       setIsStarting(false);
