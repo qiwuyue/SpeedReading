@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useAuthSession } from "@/lib/supabase/use-auth-session";
 import { showToast } from "@/lib/toast-store";
@@ -10,13 +10,9 @@ import { useUploadStore } from "@/lib/store/upload-store";
 import { FocusMode, isAnonymousUser } from "@/lib/supabase/users";
 import { UploadFile } from "@/app/ui/upload-file";
 import ConvertAnonModal from "@/app/ui/convert-anon-modal";
-
-const MOCK_STATS = [
-  { label: "Total sessions", value: "18", detail: "+4 this week" },
-  { label: "Weekly reading", value: "3.8h", detail: "mock activity" },
-  { label: "Comprehension", value: "94%", detail: "avg. quiz score" },
-  { label: "Current streak", value: "6", detail: "days" },
-];
+import ProgressAnalytics, {
+  type ProgressAnalyticsData,
+} from "@/app/ui/ProgressAnalytics";
 
 const QUICK_ACTIONS = [
   { title: "Upload PDF", desc: "Start a reading session from a document." },
@@ -30,6 +26,225 @@ const RECENT_DOCUMENTS = [
   { title: "Research digest.pdf", progress: "100%", pace: "455 WPM" },
   { title: "Productivity systems.pdf", progress: "72%", pace: "390 WPM" },
 ];
+
+type ReadingSessionAnalyticsRow = {
+  id: string;
+  words_read: number | null;
+  achieved_wpm: number | null;
+  duration_seconds?: number | null;
+  completed: boolean | null;
+  created_at: string | null;
+};
+
+type ComprehensionCheckAnalyticsRow = {
+  session_id: string | null;
+  score: number | null;
+  created_at: string | null;
+};
+
+// Used before Supabase returns data and when a query fails. Keeping this shape
+// identical to ProgressAnalyticsData lets the UI render empty states safely.
+const EMPTY_ANALYTICS_DATA: ProgressAnalyticsData = {
+  summary: {
+    totalWordsRead: 0,
+    averageWpm: 0,
+    completedSessions: 0,
+    averageQuizScore: null,
+  },
+  dailyWords: [],
+  wpmTrend: [],
+  quizScores: [],
+};
+
+type DashboardStat = {
+  label: string;
+  value: string;
+  detail: string;
+};
+
+const EMPTY_DASHBOARD_STATS: DashboardStat[] = [
+  { label: "Total sessions", value: "0", detail: "0 this week" },
+  { label: "Weekly reading", value: "0 words", detail: "this week" },
+  { label: "Comprehension", value: "No scores", detail: "avg. quiz score" },
+  { label: "Current streak", value: "0", detail: "days" },
+];
+
+// Chart labels are intentionally short because they sit on compact axes.
+const formatChartDate = (value: string | null) => {
+  if (!value) return "Unknown";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown";
+
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+};
+
+// Dashboard cards need a compact display for large weekly word totals.
+const formatCompactNumber = (value: number) =>
+  new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: value >= 1000 ? 1 : 0,
+    notation: value >= 1000 ? "compact" : "standard",
+  }).format(value);
+
+const average = (values: number[]) => {
+  if (!values.length) return null;
+  return values.reduce((total, value) => total + value, 0) / values.length;
+};
+
+const getDateKey = (value: string | null) => {
+  if (!value) return null;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  return date.toISOString().slice(0, 10);
+};
+
+const getRollingWeekStart = () => {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() - 6);
+  return date;
+};
+
+// A streak means consecutive calendar days with at least one reading session.
+// If the user has not read yet today, yesterday can still anchor the streak;
+// this avoids resetting a valid streak to 0 at midnight before today's read.
+const buildCurrentStreak = (sessions: ReadingSessionAnalyticsRow[]) => {
+  const activeDays = new Set(
+    sessions
+      .map((session) => getDateKey(session.created_at))
+      .filter((dateKey): dateKey is string => Boolean(dateKey)),
+  );
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const todayKey = today.toISOString().slice(0, 10);
+  const yesterdayKey = yesterday.toISOString().slice(0, 10);
+
+  if (!activeDays.has(todayKey) && !activeDays.has(yesterdayKey)) {
+    return 0;
+  }
+
+  let streak = 0;
+  const cursor = activeDays.has(todayKey) ? today : yesterday;
+
+  while (activeDays.has(cursor.toISOString().slice(0, 10))) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  return streak;
+};
+
+// Converts raw Supabase rows into the four dashboard stat cards. This is kept
+// separate from the chart data builder because the dashboard cards answer
+// slightly different questions than the analytics modal.
+const buildDashboardStats = (
+  sessions: ReadingSessionAnalyticsRow[],
+  checks: ComprehensionCheckAnalyticsRow[],
+): DashboardStat[] => {
+  const weekStart = getRollingWeekStart();
+  const weeklySessions = sessions.filter((session) => {
+    if (!session.created_at) return false;
+    return new Date(session.created_at) >= weekStart;
+  });
+  const weeklyWords = weeklySessions.reduce(
+    (total, session) => total + (session.words_read ?? 0),
+    0,
+  );
+  const quizScoreValues = checks
+    .map((check) => check.score)
+    .filter((score): score is number => typeof score === "number");
+  const averageQuizScore = average(quizScoreValues);
+  const currentStreak = buildCurrentStreak(sessions);
+
+  return [
+    {
+      label: "Total sessions",
+      value: String(sessions.length),
+      detail: `${weeklySessions.length} last 7 days`,
+    },
+    {
+      label: "Weekly reading",
+      value: `${formatCompactNumber(weeklyWords)} words`,
+      detail: "last 7 days",
+    },
+    {
+      label: "Comprehension",
+      value:
+        averageQuizScore === null ? "No scores" : `${Math.round(averageQuizScore)}%`,
+      detail: "avg. quiz score",
+    },
+    {
+      label: "Current streak",
+      value: String(currentStreak),
+      detail: currentStreak === 1 ? "day" : "days",
+    },
+  ];
+};
+
+// Converts raw Supabase rows into the exact prop shape required by
+// ProgressAnalytics. The component stays presentational; this page owns all
+// database querying and aggregation.
+const buildAnalyticsData = (
+  sessions: ReadingSessionAnalyticsRow[],
+  checks: ComprehensionCheckAnalyticsRow[],
+): ProgressAnalyticsData => {
+  const dailyWordsByDate = new Map<string, number>();
+
+  sessions.forEach((session) => {
+    const date = formatChartDate(session.created_at);
+    dailyWordsByDate.set(
+      date,
+      (dailyWordsByDate.get(date) ?? 0) + (session.words_read ?? 0),
+    );
+  });
+
+  const wpmValues = sessions
+    .map((session) => session.achieved_wpm)
+    .filter((wpm): wpm is number => typeof wpm === "number");
+  const quizScoreValues = checks
+    .map((check) => check.score)
+    .filter((score): score is number => typeof score === "number");
+  const averageWpm = average(wpmValues);
+  const averageQuizScore = average(quizScoreValues);
+
+  return {
+    summary: {
+      totalWordsRead: sessions.reduce(
+        (total, session) => total + (session.words_read ?? 0),
+        0,
+      ),
+      averageWpm: averageWpm === null ? 0 : Math.round(averageWpm),
+      completedSessions: sessions.filter((session) => session.completed).length,
+      averageQuizScore:
+        averageQuizScore === null ? null : Math.round(averageQuizScore),
+    },
+    dailyWords: Array.from(dailyWordsByDate.entries()).map(
+      ([date, wordsRead]) => ({
+        date,
+        wordsRead,
+      }),
+    ),
+    wpmTrend: sessions
+      .filter((session) => typeof session.achieved_wpm === "number")
+      .map((session) => ({
+        date: formatChartDate(session.created_at),
+        wpm: session.achieved_wpm ?? 0,
+      })),
+    quizScores: checks
+      .filter((check) => typeof check.score === "number")
+      .map((check) => ({
+        date: formatChartDate(check.created_at),
+        score: check.score ?? 0,
+      })),
+  };
+};
 
 const formatFocusMode = (focusMode?: FocusMode | null) => {
   if (!focusMode) return "Highlight";
@@ -60,6 +275,13 @@ export default function DashboardPage() {
   const [isAnon, setIsAnon] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
+  const [analyticsData, setAnalyticsData] =
+    useState<ProgressAnalyticsData>(EMPTY_ANALYTICS_DATA);
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [dashboardStats, setDashboardStats] =
+    useState<DashboardStat[]>(EMPTY_DASHBOARD_STATS);
+  const [progressModalOpen, setProgressModalOpen] = useState(false);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [wpmModalOpen, setWpmModalOpen] = useState(false);
@@ -69,6 +291,84 @@ export default function DashboardPage() {
   const profileEmail = profile?.email ?? user?.email ?? "";
   const defaultWpm = profile?.default_wpm ?? 250;
   const focusMode = formatFocusMode(profile?.focus_mode);
+
+  // Pulls the current user's progress rows from Supabase, logs the raw data for
+  // temporary debugging, then updates both the dashboard cards and chart modal.
+  const loadAnalytics = useCallback(
+    async ({ showLoading = false }: { showLoading?: boolean } = {}) => {
+      if (showLoading) {
+        setAnalyticsLoading(true);
+      }
+      setAnalyticsError(null);
+
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const {
+          data: { user: currentUser },
+          error: userError,
+        } = await supabase.auth.getUser();
+
+        console.log("Progress analytics user id:", currentUser?.id);
+
+        if (userError || !currentUser) {
+          throw new Error(userError?.message ?? "Unable to load current user.");
+        }
+
+        const { data: sessions, error: sessionsError } = await supabase
+          .from("reading_sessions")
+          // These are the only reading session columns needed for the current
+          // dashboard cards and ProgressAnalytics charts.
+          .select("id, words_read, achieved_wpm, completed, created_at")
+          .eq("user_id", currentUser.id)
+          .order("created_at", { ascending: true });
+
+        console.log("Progress analytics sessions:", sessions);
+
+        if (sessionsError) {
+          throw new Error(sessionsError.message);
+        }
+
+        const sessionRows = (sessions ?? []) as ReadingSessionAnalyticsRow[];
+        const sessionIds = sessionRows.map((session) => session.id);
+        let checkRows: ComprehensionCheckAnalyticsRow[] = [];
+
+        if (sessionIds.length > 0) {
+          const { data: checks, error: checksError } = await supabase
+            .from("comprehension_checks")
+            // Checks are loaded separately because they are keyed by session_id.
+            .select("session_id, score, created_at")
+            .in("session_id", sessionIds)
+            .order("created_at", { ascending: true });
+
+          console.log("Progress analytics checks:", checks);
+
+          if (checksError) {
+            throw new Error(checksError.message);
+          }
+
+          checkRows = (checks ?? []) as ComprehensionCheckAnalyticsRow[];
+        } else {
+          console.log("Progress analytics checks:", []);
+        }
+
+        setAnalyticsData(buildAnalyticsData(sessionRows, checkRows));
+        setDashboardStats(buildDashboardStats(sessionRows, checkRows));
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Unable to load progress analytics.";
+        setAnalyticsError(message);
+        setAnalyticsData(EMPTY_ANALYTICS_DATA);
+        setDashboardStats(EMPTY_DASHBOARD_STATS);
+      } finally {
+        if (showLoading) {
+          setAnalyticsLoading(false);
+        }
+      }
+    },
+    [],
+  );
 
   const handleQuickAction = (actionTitle: string) => {
     switch (actionTitle) {
@@ -83,11 +383,7 @@ export default function DashboardPage() {
         });
         break;
       case "Review progress":
-        showToast({
-          message: "Progress tracking coming soon!",
-          title: "Review Progress",
-          variant: "info",
-        });
+        setProgressModalOpen(true);
         break;
       default:
         break;
@@ -164,6 +460,65 @@ export default function DashboardPage() {
       variant: "error",
     });
   }, [profileError]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let isMounted = true;
+    let channel:
+      | ReturnType<ReturnType<typeof createSupabaseBrowserClient>["channel"]>
+      | null = null;
+
+    const setupAnalytics = async () => {
+      await loadAnalytics({ showLoading: progressModalOpen });
+
+      if (!isMounted) return;
+
+      const supabase = createSupabaseBrowserClient();
+      const {
+        data: { user: currentUser },
+      } = await supabase.auth.getUser();
+
+      if (!currentUser || !isMounted) return;
+
+      channel = supabase
+        .channel(`dashboard-analytics-${currentUser.id}`)
+        // Reading sessions are filtered by user_id, so other users' activity
+        // will not trigger this dashboard to refresh.
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "reading_sessions",
+            filter: `user_id=eq.${currentUser.id}`,
+          },
+          () => loadAnalytics(),
+        )
+        // comprehension_checks does not include user_id in the given schema, so
+        // any check change triggers a refetch. The refetch filters checks back
+        // down to this user's session ids.
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "comprehension_checks",
+          },
+          () => loadAnalytics(),
+        )
+        .subscribe();
+    };
+
+    setupAnalytics();
+
+    return () => {
+      isMounted = false;
+      if (channel) {
+        createSupabaseBrowserClient().removeChannel(channel);
+      }
+    };
+  }, [isAuthenticated, loadAnalytics, progressModalOpen]);
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -512,7 +867,7 @@ export default function DashboardPage() {
 
         <section className="grid gap-3 sm:gap-4 lg:grid-cols-[1fr_360px]">
           <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-            {MOCK_STATS.map(({ label, value, detail }) => (
+            {dashboardStats.map(({ label, value, detail }) => (
               <div
                 key={label}
                 className="rounded-2xl border border-white/[0.07] bg-[rgba(13,13,18,0.86)] p-4 sm:p-5"
@@ -892,6 +1247,68 @@ export default function DashboardPage() {
                   {profileSaving ? "Saving..." : "Save name"}
                 </button>
               </form>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {progressModalOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="progress-title"
+        >
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-xl" />
+          <div className="relative max-h-[90vh] w-full max-w-6xl overflow-hidden rounded-2xl border border-white/8 bg-[rgba(13,13,18,0.96)] p-px shadow-2xl shadow-black/60">
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -top-24 left-1/2 h-52 w-52 -translate-x-1/2 rounded-full bg-amber-500/20 blur-3xl"
+            />
+            <div className="relative max-h-[90vh] overflow-y-auto rounded-[15px] bg-[rgba(9,9,11,0.9)] px-4 py-5 sm:px-6 sm:py-6">
+              <div className="mb-5 flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-amber-400">
+                    Progress
+                  </p>
+                  <h2
+                    id="progress-title"
+                    className="mt-2 text-xl font-bold text-white"
+                  >
+                    Reading analytics
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setProgressModalOpen(false)}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 text-zinc-400 transition-all hover:border-white/20 hover:bg-white/6 hover:text-white"
+                  aria-label="Close progress analytics dialog"
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 18 18"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeWidth="1.8"
+                  >
+                    <path d="M4.5 4.5l9 9M13.5 4.5l-9 9" />
+                  </svg>
+                </button>
+              </div>
+
+              {analyticsLoading ? (
+                <div className="flex min-h-80 items-center justify-center rounded-2xl border border-white/[0.07] bg-white/[0.035] px-6 text-center text-sm text-zinc-400">
+                  Loading progress analytics...
+                </div>
+              ) : analyticsError ? (
+                <div className="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-4 text-sm text-rose-200">
+                  {analyticsError}
+                </div>
+              ) : (
+                <ProgressAnalytics data={analyticsData} />
+              )}
             </div>
           </div>
         </div>
