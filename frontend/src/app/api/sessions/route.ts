@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 type SessionPostBody = {
   documentName?: string;
-  file?: string; // base64 encoded file
+  file?: Uint8Array<ArrayBuffer>; // base64 encoded file
 };
 
 export const runtime = "edge";
@@ -42,14 +42,9 @@ export async function POST(req: NextRequest) {
   // Upload file to storage if provided
   if (body.file) {
     try {
-      const base64Data = body.file;
-      const binaryString = atob(base64Data);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
+      const bytes = body.file;
 
-      const fileName = `${Date.now()}-${body.documentName || "document"}.pdf`;
+      const fileName = `${Date.now()}-${body.documentName || "document"}`;
       const filePath = `${user.id}/${fileName}`;
 
       const { data: uploadData, error: uploadError } = await supabase.storage

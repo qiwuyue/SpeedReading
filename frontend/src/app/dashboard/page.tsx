@@ -393,26 +393,12 @@ export default function DashboardPage() {
   const handleFileUpload = async (file: File) => {
     setIsUploading(true);
     try {
-      // Convert file to base64
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64String = (reader.result as string).split(",")[1];
-        // Store in Zustand
-        setPendingFile(base64String, file.name);
-
-        showToast({
-          message: `${file.name} uploaded successfully!`,
-          title: "Ready to read",
-          variant: "success",
-        });
-
-        // Close modal and redirect to session page after a brief delay
-        setTimeout(() => {
-          setUploadModalOpen(false);
-          router.push("/session");
-        }, 1000);
-      };
-      reader.readAsDataURL(file);
+      const fileData = await file.bytes();
+      setPendingFile(fileData, file.name);
+      showToast({
+        message: `${file.name} uploaded successfully. Starting session...`,
+      });
+      return router.push("/session");
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Failed to upload file";

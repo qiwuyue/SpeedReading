@@ -21,7 +21,6 @@ export function UploadFile({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
-
   const validateFile = (file: File): boolean => {
     // Check file type
     if (!file.type.includes("pdf") && !file.name.endsWith(".pdf")) {

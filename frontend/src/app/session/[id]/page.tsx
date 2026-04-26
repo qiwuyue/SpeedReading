@@ -66,7 +66,7 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
         //   router.replace("/dashboard");
         //   return;
         // }
-        
+
         // if (data.fileError) {
         //   setError(`Error loading file: ${data.fileError}`);
         //   showToast({
@@ -77,8 +77,7 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
         //   router.replace("/dashboard");
         //   return;
         // }
-        
-      
+
         setIsLoading(false);
         return { sessionId: data.session.id, fileid: data.session.file_id };
       } catch (err) {
@@ -91,20 +90,19 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
         setIsLoading(false);
       }
     };
-    const analyzeFileContent = async (content: string, fileName: string) => {
+    const analyzeFileContent = async (content: Blob, fileName: string) => {
       try {
         const formdata = new FormData();
-        formdata.append("file", new Blob([content]), fileName);
-
+        formdata.append("file", content, fileName)
+        console.log("formdata:", formdata);
         const response = await fetch("/api/ai", {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
             Authorization: `Bearer ${session.access_token}`,
           },
           body: formdata,
         });
-        
+
         if (!response.ok) {
           setError(`AI analysis failed: ${response.statusText}`);
           showToast({
@@ -117,7 +115,7 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
         if (!reader) {
           throw new Error("Failed to read AI response stream");
         }
-        
+
         const decoder = new TextDecoder();
         let aiResponse = "";
         while (true) {
@@ -125,8 +123,8 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
           if (done) break;
           aiResponse += decoder.decode(value, { stream: true });
         }
-        
-        console.log("Raw AI Response:", aiResponse); 
+
+        console.log("Raw AI Response:", aiResponse);
         //const parsed = JSON.parse(aiResponse);
         // if (parsed.error) {
         //   setError(`AI analysis error: ${parsed.error}`);
@@ -138,7 +136,6 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
 
         //const text = parsed.result.text as string;
         //setWords(text.split(/\s+/));
-        
       } catch (err) {
         console.error("AI Analysis Error:", err);
         setError(err instanceof Error ? err.message : "AI analysis failed");
@@ -147,19 +144,41 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
           variant: "error",
         });
       }
+    };
+
+    async function getFileData(fileId: string) {
+      console.log("Fetching file data for file ID:", fileId);
+      const response = await fetch(`/api/files?id=${fileId}`, {
+        headers: {
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+      });
+
+      if (!response.ok) {
+        setError(`Failed to load file: ${response.statusText}`);
+        showToast({
+          message: `Failed to load file: ${response.statusText}`,
+          variant: "error",
+        });
+        return;
+      }
+
+      const data = await response.blob();
+      return data
     }
-    
 
     const resolver = async () => {
       const session = await fetchSessionData();
       if (session) {
-        
-        //await analyzeFileContent(session.fileBytes, session.fileName);
+        const file = await getFileData(session.fileid);
+        if (file) {
+          await analyzeFileContent(file, session.fileid);
+        }
+
       }
     };
 
     resolver();
-
   }, [sessionId, status, session?.access_token, router]);
 
   useEffect(() => {
@@ -384,7 +403,7 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
               Session Complete! 🎉
             </p>
             <p className="mt-2 text-sm text-zinc-400">
-              You've finished reading this session. Great job!
+              You&apos;ve finished reading this session. Great job!
             </p>
             <div className="mt-4 flex gap-3 justify-center">
               <button
@@ -403,4 +422,3 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
     </div>
   );
 }
-
