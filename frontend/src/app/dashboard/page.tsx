@@ -6,7 +6,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { useAuthSession } from '@/lib/supabase/use-auth-session';
 import { showToast } from '@/lib/toast-store';
-import { useUploadStore } from '@/lib/store/upload-store';
 import { FocusMode, isAnonymousUser } from '@/lib/supabase/users';
 import { UploadFile } from '@/app/ui/upload-file';
 import ConvertAnonModal from '@/app/ui/convert-anon-modal';
@@ -18,13 +17,6 @@ const QUICK_ACTIONS = [
   { title: 'Upload PDF', desc: 'Start a reading session from a document.' },
   { title: 'Try sample', desc: 'Practice with curated reading material.' },
   { title: 'Review progress', desc: 'See trends once real sessions exist.' },
-];
-
-const RECENT_DOCUMENTS = [
-  { title: 'Productivity systems.pdf', progress: '72%', pace: '390 WPM' },
-  { title: 'Deep work notes.pdf', progress: '48%', pace: '430 WPM' },
-  { title: 'Research digest.pdf', progress: '100%', pace: '455 WPM' },
-  { title: 'Productivity systems.pdf', progress: '72%', pace: '390 WPM' },
 ];
 
 type ReadingSessionAnalyticsRow = {
@@ -60,6 +52,29 @@ type DashboardStat = {
   label: string;
   value: string;
   detail: string;
+};
+
+type RecentDocument = {
+  documentId: string;
+  sessionId: string;
+  title: string;
+  progress: string;
+  pace: string;
+};
+
+type RecentSessionRow = {
+  id: string;
+  document_id: string | null;
+  words_read: number | null;
+  achieved_wpm: number | null;
+  target_wpm: number | null;
+  completed: boolean | null;
+  created_at: string | null;
+};
+
+type DocumentRow = {
+  id: string;
+  original_filename: string | null;
 };
 
 const EMPTY_DASHBOARD_STATS: DashboardStat[] = [
@@ -162,12 +177,14 @@ const buildDashboardStats = (
     .filter((score): score is number => typeof score === 'number');
   const averageQuizScore = average(quizScoreValues);
   const currentStreak = buildCurrentStreak(sessions);
+  const completedSessions = sessions.filter((session) => session.completed).length;
+  const activeSessions = Math.max(0, sessions.length - completedSessions);
 
   return [
     {
       label: 'Total sessions',
       value: String(sessions.length),
-      detail: `${weeklySessions.length} last 7 days`,
+      detail: `${completedSessions} completed, ${activeSessions} Incomplete`,
     },
     {
       label: 'Weekly reading',
@@ -253,6 +270,19 @@ const formatFocusMode = (focusMode?: FocusMode | null) => {
   return focusMode.charAt(0).toUpperCase() + focusMode.slice(1);
 };
 
+const formatRecentProgress = (session: RecentSessionRow) => {
+  if (session.completed) return '100% complete';
+  if ((session.words_read ?? 0) > 0) {
+    return `${formatCompactNumber(session.words_read ?? 0)} words read`;
+  }
+  return 'Ready to read';
+};
+
+const formatRecentPace = (session: RecentSessionRow) => {
+  const pace = session.achieved_wpm ?? session.target_wpm;
+  return pace ? `${pace} WPM` : 'Not started';
+};
+
 export default function DashboardPage() {
   const router = useRouter();
   const {
@@ -267,7 +297,6 @@ export default function DashboardPage() {
     updateFocusMode,
     user,
   } = useAuthSession();
-  const setPendingFile = useUploadStore((state) => state.setPendingFile);
   const [authError, setAuthError] = useState('');
   const [convertModalOpen, setConvertModalOpen] = useState(false);
   const [displayNameInput, setDisplayNameInput] = useState('');
@@ -284,6 +313,14 @@ export default function DashboardPage() {
   const [dashboardStats, setDashboardStats] = useState<DashboardStat[]>(
     EMPTY_DASHBOARD_STATS,
   );
+  const [recentDocuments, setRecentDocuments] = useState<RecentDocument[]>([]);
+  const [recentDocumentsError, setRecentDocumentsError] = useState<
+    string | null
+  >(null);
+  const [recentDocumentsLoading, setRecentDocumentsLoading] = useState(false);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(
+    null,
+  );
   const [progressModalOpen, setProgressModalOpen] = useState(false);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -294,6 +331,90 @@ export default function DashboardPage() {
   const profileEmail = profile?.email ?? user?.email ?? '';
   const defaultWpm = profile?.default_wpm ?? 250;
   const focusMode = formatFocusMode(profile?.focus_mode);
+
+  const loadRecentDocuments = useCallback(async () => {
+    setRecentDocumentsLoading(true);
+    setRecentDocumentsError(null);
+
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const {
+        data: { user: currentUser },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !currentUser) {
+        throw new Error(userError?.message ?? 'Unable to load current user.');
+      }
+
+      const { data: sessions, error: sessionsError } = await supabase
+        .from('reading_sessions')
+        .select(
+          'id, document_id, words_read, achieved_wpm, target_wpm, completed, created_at',
+        )
+        .eq('user_id', currentUser.id)
+        .not('document_id', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(8);
+
+      if (sessionsError) {
+        throw new Error(sessionsError.message);
+      }
+
+      const sessionRows = (sessions ?? []) as RecentSessionRow[];
+      const documentIds = Array.from(
+        new Set(
+          sessionRows
+            .map((session) => session.document_id)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      );
+
+      if (!documentIds.length) {
+        setRecentDocuments([]);
+        return;
+      }
+
+      const { data: documents, error: documentsError } = await supabase
+        .from('documents')
+        .select('id, original_filename')
+        .in('id', documentIds);
+
+      if (documentsError) {
+        throw new Error(documentsError.message);
+      }
+
+      const documentsById = new Map(
+        ((documents ?? []) as DocumentRow[]).map((document) => [
+          document.id,
+          document,
+        ]),
+      );
+
+      setRecentDocuments(
+        sessionRows
+          .filter((session) => session.document_id)
+          .map((session) => ({
+            documentId: session.document_id as string,
+            sessionId: session.id,
+            title:
+              documentsById.get(session.document_id as string)
+                ?.original_filename ?? 'Untitled PDF',
+            progress: formatRecentProgress(session),
+            pace: formatRecentPace(session),
+          })),
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to load recent documents.';
+      setRecentDocuments([]);
+      setRecentDocumentsError(message);
+    } finally {
+      setRecentDocumentsLoading(false);
+    }
+  }, []);
 
   // Pulls the current user's progress rows from Supabase, logs the raw data for
   // temporary debugging, then updates both the dashboard cards and chart modal.
@@ -423,6 +544,52 @@ export default function DashboardPage() {
     }
   };
 
+  const handleDeleteDocument = async (documentId: string, title: string) => {
+    const confirmed = window.confirm(`Delete "${title}"?`);
+    if (!confirmed) return;
+
+    setDeletingDocumentId(documentId);
+
+    try {
+      const token = (await createSupabaseBrowserClient().auth.getSession()).data
+        .session?.access_token;
+
+      if (!token) {
+        throw new Error('You need to be logged in to delete documents.');
+      }
+
+      const response = await fetch(`/api/documents/${documentId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+
+      if (!response.ok) {
+        throw new Error(data?.error ?? 'Failed to delete document.');
+      }
+
+      showToast({
+        message: `${title} was deleted.`,
+        title: 'Document deleted',
+        variant: 'success',
+      });
+
+      await Promise.all([loadRecentDocuments(), loadAnalytics()]);
+    } catch (error) {
+      showToast({
+        message:
+          error instanceof Error ? error.message : 'Failed to delete document.',
+        title: 'Delete failed',
+        variant: 'error',
+      });
+    } finally {
+      setDeletingDocumentId(null);
+    }
+  };
+
   useEffect(() => {
     if (status === 'unauthenticated') router.replace('/login');
   }, [router, status]);
@@ -468,7 +635,10 @@ export default function DashboardPage() {
     > | null = null;
 
     const setupAnalytics = async () => {
-      await loadAnalytics({ showLoading: progressModalOpen });
+      await Promise.all([
+        loadAnalytics({ showLoading: progressModalOpen }),
+        loadRecentDocuments(),
+      ]);
 
       if (!isMounted) return;
 
@@ -491,7 +661,10 @@ export default function DashboardPage() {
             table: 'reading_sessions',
             filter: `user_id=eq.${currentUser.id}`,
           },
-          () => loadAnalytics(),
+          () => {
+            loadAnalytics();
+            loadRecentDocuments();
+          },
         )
         // comprehension_checks does not include user_id in the given schema, so
         // any check change triggers a refetch. The refetch filters checks back
@@ -505,6 +678,16 @@ export default function DashboardPage() {
           },
           () => loadAnalytics(),
         )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'documents',
+            filter: `user_id=eq.${currentUser.id}`,
+          },
+          () => loadRecentDocuments(),
+        )
         .subscribe();
     };
 
@@ -516,7 +699,7 @@ export default function DashboardPage() {
         createSupabaseBrowserClient().removeChannel(channel);
       }
     };
-  }, [isAuthenticated, loadAnalytics, progressModalOpen]);
+  }, [isAuthenticated, loadAnalytics, loadRecentDocuments, progressModalOpen]);
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -608,7 +791,7 @@ export default function DashboardPage() {
       await updateDefaultWpm(wpm);
       setWpmModalOpen(false);
       showToast({
-        message: `Default pace set to ${wpm} WPM.`,
+        message: `Target pace set to ${wpm} WPM.`,
         title: 'Profile saved',
         variant: 'success',
       });
@@ -794,7 +977,7 @@ export default function DashboardPage() {
               <div className="mt-5 grid grid-cols-2 gap-3">
                 <div className="rounded-xl border border-white/6 bg-black/20 p-4">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs text-zinc-500">Default pace</p>
+                    <p className="text-xs text-zinc-500">Target pace</p>
                     <button
                       type="button"
                       onClick={() => {
@@ -889,7 +1072,7 @@ export default function DashboardPage() {
               {[
                 ['Display name', displayName || 'Not set'],
                 ['Email', profileEmail || 'Not available'],
-                ['Default WPM', `${defaultWpm}`],
+                ['Target WPM', `${defaultWpm}`],
                 ['Focus mode', focusMode],
               ].map(([label, value]) => (
                 <div
@@ -952,15 +1135,27 @@ export default function DashboardPage() {
                   Recent documents
                 </h2>
                 <p className="mt-1 text-sm text-zinc-500">
-                  {RECENT_DOCUMENTS.length === 0
+                  {recentDocumentsLoading
+                    ? 'Loading your uploaded PDFs...'
+                    : recentDocuments.length === 0
                     ? 'Start your first reading session to see documents here.'
-                    : 'Mock data until document sessions are connected.'}
+                    : 'Continue from your uploaded PDFs.'}
                 </p>
               </div>
             </div>
 
-            <div className="max-h-72 overflow-y-auto sm:max-h-96">
-              {RECENT_DOCUMENTS.length === 0 ? (
+            <div className="scrollbar-hidden max-h-72 overflow-y-auto sm:max-h-96">
+              {recentDocumentsError ? (
+                <div className="rounded-xl border border-rose-400/20 bg-rose-500/10 p-4 text-sm text-rose-200">
+                  {recentDocumentsError}
+                </div>
+              ) : recentDocumentsLoading ? (
+                <div className="rounded-xl border border-white/8 bg-white/3 p-8 text-center">
+                  <p className="text-sm text-zinc-400">
+                    Loading recent documents...
+                  </p>
+                </div>
+              ) : recentDocuments.length === 0 ? (
                 <div className="rounded-xl border border-white/8 bg-white/3 p-8 text-center">
                   <p className="text-sm text-zinc-400">
                     No recent reads or documents yet.
@@ -971,24 +1166,47 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <div className="grid gap-3">
-                  {RECENT_DOCUMENTS.map(({ title, progress, pace }, index) => (
-                    <div
-                      key={index}
-                      className="flex flex-col gap-3 rounded-xl border border-white/6 bg-white/3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate font-medium text-zinc-200">
-                          {title}
-                        </p>
-                        <p className="mt-1 text-xs text-zinc-500">
-                          {progress} complete
-                        </p>
+                  {recentDocuments.map(
+                    ({ documentId, sessionId, title, progress, pace }) => (
+                      <div
+                        key={sessionId}
+                        className="flex flex-col gap-3 rounded-xl border border-white/6 bg-white/3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-zinc-200">
+                            {title}
+                          </p>
+                          <p className="mt-1 text-xs text-zinc-500">
+                            {progress}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span className="mr-1 text-sm font-semibold text-amber-300">
+                            {pace}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => router.push(`/session/${sessionId}`)}
+                            className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-100 transition-all hover:border-amber-300/50 hover:bg-amber-500/15"
+                          >
+                            Read
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleDeleteDocument(documentId, title)
+                            }
+                            disabled={deletingDocumentId === documentId}
+                            className="rounded-lg border border-rose-400/25 bg-rose-500/10 px-3 py-2 text-sm font-semibold text-rose-200 transition-all hover:border-rose-300/50 hover:bg-rose-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {deletingDocumentId === documentId
+                              ? 'Deleting...'
+                              : 'Delete'}
+                          </button>
+                        </div>
                       </div>
-                      <span className="text-sm font-semibold text-amber-300">
-                        {pace}
-                      </span>
-                    </div>
-                  ))}
+                    ),
+                  )}
                 </div>
               )}
             </div>
@@ -1013,13 +1231,13 @@ export default function DashboardPage() {
               <div className="mb-5 flex items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-widest text-amber-400">
-                    Reading pace
+                    Target pace
                   </p>
                   <h2
                     id="wpm-title"
                     className="mt-2 text-xl font-bold text-white"
                   >
-                    Set default WPM
+                    Set target WPM
                   </h2>
                 </div>
                 <button
@@ -1263,7 +1481,7 @@ export default function DashboardPage() {
               aria-hidden="true"
               className="pointer-events-none absolute -top-24 left-1/2 h-52 w-52 -translate-x-1/2 rounded-full bg-amber-500/20 blur-3xl"
             />
-            <div className="relative max-h-[90vh] overflow-y-auto rounded-[15px] bg-[rgba(9,9,11,0.9)] px-4 py-5 sm:px-6 sm:py-6">
+            <div className="scrollbar-hidden relative max-h-[90vh] overflow-y-auto rounded-[15px] bg-[rgba(9,9,11,0.9)] px-4 py-5 sm:px-6 sm:py-6">
               <div className="mb-5 flex items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-widest text-amber-400">

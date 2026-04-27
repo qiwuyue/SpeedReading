@@ -183,7 +183,7 @@ export default function SessionPage() {
 
             <div className="mt-8 grid gap-3 sm:gap-4 lg:grid-cols-3">
               <div className="rounded-2xl border border-white/[0.07] bg-[rgba(13,13,18,0.86)] p-6">
-                <p className="text-sm text-zinc-500">Reading pace</p>
+                <p className="text-sm text-zinc-500">Target WPM</p>
                 <p className="mt-2 text-2xl font-bold text-amber-300">
                   {profile?.default_wpm || 250} WPM
                 </p>

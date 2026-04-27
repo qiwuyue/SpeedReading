@@ -58,8 +58,18 @@ export async function POST(req: NextRequest) {
 
   let fileId: string | null = null;
   let storagePath: string | null = null;
+  let targetWpm = 250;
 
-  // Upload raw ArrayBuffer — no JSON serialization, clean binary
+  const { data: profileData, error: profileError } = await supabase
+    .from('users')
+    .select('default_wpm')
+    .eq('id', user.id)
+    .single();
+
+  if (!profileError && typeof profileData?.default_wpm === 'number') {
+    targetWpm = profileData.default_wpm;
+  }
+
   try {
     const arrayBuffer = await file.arrayBuffer();
     const fileName = `${Date.now()}-${documentName}`;
@@ -118,7 +128,7 @@ export async function POST(req: NextRequest) {
   console.log({
     user_id: user.id,
     document_id: fileId,
-    target_wpm: 300,
+    target_wpm: targetWpm,
     words_read: 0,
     duration_seconds: 0,
     completed: false,
@@ -131,7 +141,7 @@ export async function POST(req: NextRequest) {
     .insert({
       user_id: user.id,
       document_id: fileId,
-      target_wpm: 300,
+      target_wpm: targetWpm,
       words_read: 0,
       duration_seconds: 0,
       completed: false,

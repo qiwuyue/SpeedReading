@@ -2,10 +2,12 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, use } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, use } from 'react';
 import { useAuthSession } from '@/lib/supabase/use-auth-session';
 import { showToast } from '@/lib/toast-store';
 import { useUploadStore } from '@/lib/store/upload-store';
+import { QuizScreen } from '@/app/ui/QuizScreen';
+import type { Question } from '@/lib/types';
 
 type SessionPageProps = {
   params: Promise<{
@@ -23,6 +25,82 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
   const [wpm, setWpm] = useState(profile?.default_wpm || 250);
   const [words, setWords] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [durationSeconds, setDurationSeconds] = useState(0);
+  const [quizQuestions, setQuizQuestions] = useState<Question[]>([]);
+  const [showQuiz, setShowQuiz] = useState(false);
+  const [quizSubmitting, setQuizSubmitting] = useState(false);
+  const [quizScore, setQuizScore] = useState<number | null>(null);
+  const sessionEndedRef = useRef(false);
+
+  const wordsRead = words.length ? currentWordIndex + 1 : 0;
+  const achievedWpm = useMemo(() => {
+    if (!durationSeconds || !wordsRead) return null;
+    return Math.round(wordsRead / (durationSeconds / 60));
+  }, [durationSeconds, wordsRead]);
+  const isComplete = words.length > 0 && currentWordIndex === words.length - 1;
+
+  const formattedDuration = useMemo(() => {
+    const minutes = Math.floor(durationSeconds / 60);
+    const seconds = durationSeconds % 60;
+    return `${minutes}:${String(seconds).padStart(2, '0')}`;
+  }, [durationSeconds]);
+
+  const finishReadingSession = useCallback(
+    async (completed: boolean) => {
+      if (!session?.access_token || !words.length || sessionEndedRef.current) {
+        return;
+      }
+
+      const payload = {
+        words_read: completed ? words.length : wordsRead,
+        achieved_wpm: achievedWpm,
+        duration_seconds: durationSeconds,
+        completed,
+      };
+
+      const response = await fetch(`/api/sessions/${sessionId}`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error ?? 'Failed to save session result');
+      }
+
+      sessionEndedRef.current = true;
+    },
+    [
+      achievedWpm,
+      durationSeconds,
+      session?.access_token,
+      sessionId,
+      words.length,
+      wordsRead,
+    ],
+  );
+
+  const handleExitSession = useCallback(async () => {
+    try {
+      await finishReadingSession(isComplete);
+    } catch (err) {
+      console.error('Failed to save session result before exit:', err);
+      showToast({
+        message:
+          err instanceof Error
+            ? err.message
+            : 'Failed to save session result',
+        variant: 'error',
+      });
+    } finally {
+      useUploadStore.getState().clearPendingFile();
+      router.replace('/dashboard');
+    }
+  }, [finishReadingSession, isComplete, router]);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -111,6 +189,7 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
           .split('\n')
           .filter((l) => l.startsWith('data:'));
         let allWords: string[] = [];
+        const allQuestions: Question[] = [];
         for (const line of lines) {
           const data = line.replace('data:', '').trim();
           if (data === '[DONE]') break;
@@ -119,11 +198,15 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
             if (parsed.data?.text) {
               allWords = [...allWords, ...parsed.data.text.split(/\s+/)];
             }
+            if (Array.isArray(parsed.data?.questions)) {
+              allQuestions.push(...parsed.data.questions);
+            }
           } catch {
             // skip malformed lines
           }
         }
         setWords(allWords);
+        setQuizQuestions(allQuestions);
       } catch (err) {
         console.error('AI Analysis Error:', err);
         setError(err instanceof Error ? err.message : 'AI analysis failed');
@@ -145,6 +228,81 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
     resolver();
   }, [sessionId, status, session?.access_token, router]);
 
+  const submitComprehensionCheck = async (answers: (number | null)[]) => {
+    if (!session?.access_token) {
+      showToast({
+        message: 'You need to be logged in to submit a comprehension check.',
+        variant: 'error',
+      });
+      return;
+    }
+
+    setQuizSubmitting(true);
+
+    try {
+      const correctCount = quizQuestions.reduce((total, question, index) => {
+        return total + (answers[index] === question.answer ? 1 : 0);
+      }, 0);
+      const score =
+        quizQuestions.length === 0
+          ? 0
+          : Math.round((correctCount / quizQuestions.length) * 100);
+      const questionsJson = quizQuestions.map((question) => ({
+        question: question.q,
+        choices: question.options,
+        answer: question.options[question.answer] ?? null,
+        answerIndex: question.answer,
+      }));
+      const answersJson = quizQuestions.map((question, index) => {
+        const selectedIndex = answers[index];
+        return {
+          question: question.q,
+          selected: selectedIndex === null ? null : question.options[selectedIndex],
+          selectedIndex,
+          correct: selectedIndex === question.answer,
+          correctAnswer: question.options[question.answer] ?? null,
+          correctIndex: question.answer,
+        };
+      });
+
+      const response = await fetch('/api/comprehension-checks', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sessionId,
+          questions: questionsJson,
+          answers: answersJson,
+          score,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error ?? 'Failed to save comprehension check');
+      }
+
+      setQuizScore(score);
+      showToast({
+        message: `You scored ${score}%.`,
+        title: 'Comprehension saved',
+        variant: 'success',
+      });
+    } catch (err) {
+      showToast({
+        message:
+          err instanceof Error
+            ? err.message
+            : 'Failed to save comprehension check',
+        variant: 'error',
+      });
+    } finally {
+      setQuizSubmitting(false);
+    }
+  };
+
   useEffect(() => {
     if (isPaused || !words.length) return;
 
@@ -159,6 +317,70 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
 
     return () => clearTimeout(timer);
   }, [currentWordIndex, isPaused, wpm, words.length]);
+
+  useEffect(() => {
+    if (isPaused || !words.length || isComplete) return;
+
+    const timer = window.setInterval(() => {
+      setDurationSeconds((current) => current + 1);
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [isComplete, isPaused, words.length]);
+
+  useEffect(() => {
+    if (!isComplete || !isPaused || sessionEndedRef.current) return;
+
+    finishReadingSession(true).catch((err) => {
+      console.error('Failed to save completed session:', err);
+      showToast({
+        message:
+          err instanceof Error
+            ? err.message
+            : 'Failed to save completed session',
+        variant: 'error',
+      });
+    });
+  }, [finishReadingSession, isComplete, isPaused]);
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (!session?.access_token || !words.length || sessionEndedRef.current) {
+        return;
+      }
+
+      const payload = JSON.stringify({
+        words_read: isComplete ? words.length : wordsRead,
+        achieved_wpm: achievedWpm,
+        duration_seconds: durationSeconds,
+        completed: isComplete,
+      });
+
+      fetch(`/api/sessions/${sessionId}`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: payload,
+        keepalive: true,
+      }).catch(() => undefined);
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [
+    achievedWpm,
+    durationSeconds,
+    isComplete,
+    session?.access_token,
+    sessionId,
+    words.length,
+    wordsRead,
+  ]);
 
   if (isLoading || status === 'loading') {
     return (
@@ -217,10 +439,7 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => {
-                useUploadStore.getState().clearPendingFile();
-                router.replace('/dashboard');
-              }}
+              onClick={handleExitSession}
               className="rounded-lg border border-white/10 px-3 py-2 text-sm font-medium text-zinc-300 transition-all hover:border-white/20 hover:bg-white/5 hover:text-white sm:px-4"
             >
               Exit Session
@@ -231,27 +450,70 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
 
       {/* Main Reading Area */}
       <main className="mx-auto max-w-4xl px-4 py-12 sm:px-6">
+        {showQuiz ? (
+          <div className="rounded-3xl border border-white/8 bg-white px-6 py-6 text-zinc-900 shadow-2xl shadow-black/30 sm:px-8">
+            {quizScore === null ? (
+              <>
+                <QuizScreen
+                  chunkTitle="Reading session"
+                  wpm={achievedWpm ?? wpm}
+                  questions={quizQuestions}
+                  onSubmit={submitComprehensionCheck}
+                />
+                {quizSubmitting ? (
+                  <p className="mt-3 text-sm text-gray-500">
+                    Saving comprehension check...
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <div className="text-center">
+                <h2 className="text-2xl font-bold text-gray-950">
+                  Comprehension saved
+                </h2>
+                <p className="mt-3 text-lg font-semibold text-blue-700">
+                  Score: {quizScore}%
+                </p>
+                <button
+                  type="button"
+                  onClick={handleExitSession}
+                  className="mt-6 rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+                >
+                  Back to Dashboard
+                </button>
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {!showQuiz ? (
+          <>
         {error && words.length > 0 && (
           <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-300">
             ⚠️ {error}
           </div>
         )}
-        <div className="mb-8 grid gap-3 sm:grid-cols-3">
+        <div className="mb-8 grid gap-3 sm:grid-cols-4">
           <div className="rounded-xl border border-white/[0.07] bg-[rgba(13,13,18,0.86)] p-4">
             <p className="text-xs text-zinc-500 uppercase tracking-wider">
-              Reading Speed
+              Target WPM
             </p>
             <p className="mt-2 text-xl font-bold text-amber-300">{wpm} WPM</p>
           </div>
           <div className="rounded-xl border border-white/[0.07] bg-[rgba(13,13,18,0.86)] p-4">
             <p className="text-xs text-zinc-500 uppercase tracking-wider">
-              Focus Mode
+              Time
+            </p>
+            <p className="mt-2 text-xl font-bold text-sky-300">
+              {formattedDuration}
+            </p>
+          </div>
+          <div className="rounded-xl border border-white/[0.07] bg-[rgba(13,13,18,0.86)] p-4">
+            <p className="text-xs text-zinc-500 uppercase tracking-wider">
+              Actual Pace
             </p>
             <p className="mt-2 text-xl font-bold text-white">
-              {profile?.focus_mode
-                ? profile.focus_mode.charAt(0).toUpperCase() +
-                  profile.focus_mode.slice(1)
-                : 'Highlight'}
+              {achievedWpm ? `${achievedWpm} WPM` : 'Calculating'}
             </p>
           </div>
           <div className="rounded-xl border border-white/[0.07] bg-[rgba(13,13,18,0.86)] p-4">
@@ -259,7 +521,7 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
               Progress
             </p>
             <p className="mt-2 text-xl font-bold text-emerald-400">
-              {currentWordIndex + 1} / {words.length}
+              {wordsRead} / {words.length}
             </p>
           </div>
         </div>
@@ -375,11 +637,21 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
               You&apos;ve finished reading this session. Great job!
             </p>
             <div className="mt-4 flex gap-3 justify-center">
+              {quizQuestions.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setShowQuiz(true)}
+                  className="rounded-lg border border-emerald-400/30 bg-emerald-500/15 px-4 py-2 font-semibold text-emerald-100 transition-all hover:border-emerald-300/50 hover:bg-emerald-500/20"
+                >
+                  Start comprehension check
+                </button>
+              ) : (
+                <span className="rounded-lg border border-white/10 px-4 py-2 text-sm text-zinc-400">
+                  No comprehension check available
+                </span>
+              )}
               <button
-                onClick={() => {
-                  useUploadStore.getState().clearPendingFile();
-                  router.replace('/dashboard');
-                }}
+                onClick={handleExitSession}
                 className="rounded-lg bg-linear-to-r from-amber-500 to-orange-600 px-4 py-2 font-semibold text-white transition-all hover:from-amber-400 hover:to-orange-500"
               >
                 Back to Dashboard
@@ -387,6 +659,8 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
             </div>
           </div>
         )}
+          </>
+        ) : null}
       </main>
     </div>
   );
