@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { initializeAuthState, useAuthStore } from './auth-store';
+import { initializeAuthState, refreshAuthState, useAuthStore } from './auth-store';
 
 export function useAuthSession() {
   const auth = useAuthStore(
@@ -23,6 +23,16 @@ export function useAuthSession() {
   useEffect(() => {
     initializeAuthState();
   }, []);
+
+  useEffect(() => {
+    if (auth.status !== 'loading') return;
+
+    const timeout = window.setTimeout(() => {
+      void refreshAuthState();
+    }, 2500);
+
+    return () => window.clearTimeout(timeout);
+  }, [auth.status]);
 
   return {
     ...auth,

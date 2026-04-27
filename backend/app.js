@@ -3,6 +3,7 @@ const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 const dotenv = require('dotenv');
 const pdfParse = require('pdf-parse');
+const { extractText: extractTextWithUnpdf, getDocumentProxy } = require('unpdf');
 dotenv.config();
 
 const app = express();
@@ -49,11 +50,25 @@ function isPdfBytes(inputBuffer) {
 }
 
 async function extractPdfText(pdfBuffer) {
-  const data = await pdfParse(pdfBuffer);
-  console.log(
-    `Pages: ${data.numpages}, extracted text length: ${data.text.length}`,
-  );
-  return data.text || '';
+  try {
+    const data = await pdfParse(pdfBuffer);
+    console.log(
+      `Pages: ${data.numpages}, extracted text length: ${data.text.length}`,
+    );
+    return data.text || '';
+  } catch (error) {
+    console.warn(
+      'pdf-parse failed, trying unpdf fallback:',
+      error instanceof Error ? error.message : error,
+    );
+
+    const pdf = await getDocumentProxy(new Uint8Array(pdfBuffer));
+    const result = await extractTextWithUnpdf(pdf, { mergePages: true });
+    console.log(
+      `unpdf pages: ${result.totalPages}, extracted text length: ${result.text.length}`,
+    );
+    return result.text || '';
+  }
 }
 async function requireSupabaseAuth(req, res, next) {
   if (!supabase) {

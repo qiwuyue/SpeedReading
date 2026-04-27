@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type { User } from "@supabase/supabase-js";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { refreshAuthState } from "@/lib/supabase/auth-store";
 import { updateUserLastLogin, upsertUserProfile } from "@/lib/supabase/users";
 
 export type AuthMode = "login" | "signup";
@@ -162,8 +163,9 @@ export default function AuthModal({
       }
 
       if (data.session) {
-        onClose();
-        router.push("/dashboard");
+        await refreshAuthState();
+        router.replace("/dashboard");
+        router.refresh();
         return;
       }
 
@@ -193,8 +195,9 @@ export default function AuthModal({
       }
     }
 
-    onClose();
-    router.push("/dashboard");
+    await refreshAuthState();
+    router.replace("/dashboard");
+    router.refresh();
   };
 
   return (
@@ -375,8 +378,9 @@ export default function AuthModal({
                     }
                   }
 
-                  onClose();
-                  router.push("/dashboard");
+                  await refreshAuthState();
+                  router.replace("/dashboard");
+                  router.refresh();
                 } catch (error) {
                   setLoading(false);
                   setErrors({

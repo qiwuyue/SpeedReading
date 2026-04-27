@@ -24,7 +24,7 @@ type AuthState = {
 let initialized = false;
 let profileRequestId = 0;
 
-const applySession = async (session: Session | null) => {
+export const applySession = async (session: Session | null) => {
   const user = session?.user ?? null;
   const nextProfileRequestId = ++profileRequestId;
   const currentProfile = useAuthStore.getState().profile;
@@ -190,21 +190,7 @@ export function initializeAuthState() {
   try {
     const supabase = createSupabaseBrowserClient();
 
-    supabase.auth.getSession().then(({ data, error }) => {
-      if (error) {
-        useAuthStore.setState({
-          authError: error.message,
-          profile: null,
-          profileLoading: false,
-          session: null,
-          status: 'unauthenticated',
-          user: null,
-        });
-        return;
-      }
-
-      void applySession(data.session);
-    });
+    void refreshAuthState();
 
     supabase.auth.onAuthStateChange((_event, session) => {
       void applySession(session);
@@ -222,6 +208,39 @@ export function initializeAuthState() {
         status: 'unauthenticated',
         user: null,
       });
+    });
+  }
+}
+
+export async function refreshAuthState() {
+  try {
+    const supabase = createSupabaseBrowserClient();
+    const { data, error } = await supabase.auth.getSession();
+
+    if (error) {
+      useAuthStore.setState({
+        authError: error.message,
+        profile: null,
+        profileLoading: false,
+        session: null,
+        status: 'unauthenticated',
+        user: null,
+      });
+      return;
+    }
+
+    await applySession(data.session);
+  } catch (error) {
+    useAuthStore.setState({
+      authError:
+        error instanceof Error
+          ? error.message
+          : 'Unable to check authentication state.',
+      profile: null,
+      profileLoading: false,
+      session: null,
+      status: 'unauthenticated',
+      user: null,
     });
   }
 }
