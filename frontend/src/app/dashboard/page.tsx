@@ -321,6 +321,9 @@ export default function DashboardPage() {
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(
     null,
   );
+  const [startingDocumentId, setStartingDocumentId] = useState<string | null>(
+    null,
+  );
   const [progressModalOpen, setProgressModalOpen] = useState(false);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -391,18 +394,28 @@ export default function DashboardPage() {
         ]),
       );
 
+      const latestSessionsByDocumentId = new Map<string, RecentSessionRow>();
+      sessionRows.forEach((session) => {
+        if (
+          !session.document_id ||
+          latestSessionsByDocumentId.has(session.document_id)
+        ) {
+          return;
+        }
+
+        latestSessionsByDocumentId.set(session.document_id, session);
+      });
+
       setRecentDocuments(
-        sessionRows
-          .filter((session) => session.document_id)
-          .map((session) => ({
-            documentId: session.document_id as string,
-            sessionId: session.id,
-            title:
-              documentsById.get(session.document_id as string)
-                ?.original_filename ?? 'Untitled PDF',
-            progress: formatRecentProgress(session),
-            pace: formatRecentPace(session),
-          })),
+        Array.from(latestSessionsByDocumentId.values()).map((session) => ({
+          documentId: session.document_id as string,
+          sessionId: session.id,
+          title:
+            documentsById.get(session.document_id as string)
+              ?.original_filename ?? 'Untitled PDF',
+          progress: formatRecentProgress(session),
+          pace: formatRecentPace(session),
+        })),
       );
     } catch (error) {
       const message =
@@ -541,6 +554,48 @@ export default function DashboardPage() {
         variant: 'error',
       });
       setIsUploading(false);
+    }
+  };
+
+  const handleReadDocument = async (documentId: string) => {
+    setStartingDocumentId(documentId);
+
+    try {
+      if (!user) {
+        throw new Error('You need to be logged in to read documents.');
+      }
+
+      const supabase = createSupabaseBrowserClient();
+      const { data: newSession, error } = await supabase
+        .from('reading_sessions')
+        .insert({
+          user_id: user.id,
+          document_id: documentId,
+          target_wpm: defaultWpm,
+          words_read: 0,
+          duration_seconds: 0,
+          completed: false,
+          start_page: 1,
+          end_page: 1,
+        })
+        .select('id')
+        .single();
+
+      if (error || !newSession) {
+        throw new Error(error?.message ?? 'Failed to create reading session.');
+      }
+
+      router.push(`/session/${newSession.id}`);
+    } catch (error) {
+      showToast({
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Failed to start reading session.',
+        title: 'Start failed',
+        variant: 'error',
+      });
+      setStartingDocumentId(null);
     }
   };
 
@@ -1186,10 +1241,13 @@ export default function DashboardPage() {
                           </span>
                           <button
                             type="button"
-                            onClick={() => router.push(`/session/${sessionId}`)}
-                            className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-100 transition-all hover:border-amber-300/50 hover:bg-amber-500/15"
+                            onClick={() => handleReadDocument(documentId)}
+                            disabled={startingDocumentId === documentId}
+                            className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-100 transition-all hover:border-amber-300/50 hover:bg-amber-500/15 disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            Read
+                            {startingDocumentId === documentId
+                              ? 'Starting...'
+                              : 'Read'}
                           </button>
                           <button
                             type="button"
