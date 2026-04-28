@@ -28,8 +28,6 @@ export function ReadScreen({
   const wpmRef = useRef(wpm);
   const wordIdxRef = useRef(0);
 
-  wpmRef.current = wpm;
-
   const stop = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
@@ -79,6 +77,9 @@ export function ReadScreen({
   }
 
   useEffect(() => () => stop(), [stop]);
+  useEffect(() => {
+    wpmRef.current = wpm;
+  }, [wpm]);
 
   const progress = Math.round((wordIdx / words.length) * 100);
   const currentWord = words[Math.max(0, wordIdx - 1)] ?? "Press play";
