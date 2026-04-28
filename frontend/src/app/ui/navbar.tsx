@@ -98,7 +98,7 @@ export default function Navbar() {
             {!isAuthenticated && (
               <button
                 type="button"
-                onClick={handleLoginClick}
+                onClick={() => router.push("/login")}
                 className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-white transition-colors"
               >
                 Log in
@@ -107,7 +107,7 @@ export default function Navbar() {
             {isAuthenticated && (
               <button
                 type="button"
-                onClick={handleDashboardClick}
+                onClick={() => router.push("/dashboard")}
                 className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-white transition-colors"
               >
                 Dashboard
