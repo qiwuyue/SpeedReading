@@ -1,4 +1,5 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
+import type { Database } from "./database.types";
 
 type UserProfileInput = {
   displayName?: string;
@@ -18,7 +19,9 @@ export type UserProfile = {
   id: string;
 };
 
-export async function getUserProfile(supabase: SupabaseClient, userId: string) {
+type AppSupabaseClient = SupabaseClient<Database>;
+
+export async function getUserProfile(supabase: AppSupabaseClient, userId: string) {
   const { data, error } = await supabase
     .from("users")
     .select("id, email, display_name, default_wpm, focus_mode")
@@ -30,7 +33,7 @@ export async function getUserProfile(supabase: SupabaseClient, userId: string) {
 }
 
 export async function upsertUserProfile(
-  supabase: SupabaseClient,
+  supabase: AppSupabaseClient,
   { displayName, user }: UserProfileInput,
 ) {
   const { error } = await supabase.from("users").upsert(
@@ -50,7 +53,7 @@ export async function upsertUserProfile(
 }
 
 export async function updateUserDisplayName(
-  supabase: SupabaseClient,
+  supabase: AppSupabaseClient,
   userId: string,
   displayName: string,
 ) {
@@ -63,7 +66,7 @@ export async function updateUserDisplayName(
 }
 
 export async function updateDefaultWpm(
-  supabase: SupabaseClient,
+  supabase: AppSupabaseClient,
   userId: string,
   wpm: number,
 ) {
@@ -76,7 +79,7 @@ export async function updateDefaultWpm(
 }
 
 export async function updateUserLastLogin(
-  supabase: SupabaseClient,
+  supabase: AppSupabaseClient,
   user: User,
 ) {
   const { error } = await supabase
@@ -88,7 +91,7 @@ export async function updateUserLastLogin(
 }
 
 export async function isAnonymousUser(
-  supabase: SupabaseClient,
+  supabase: AppSupabaseClient,
 ): Promise<boolean> {
   const {
     data: { user },
@@ -101,7 +104,7 @@ export async function isAnonymousUser(
 }
 
 export async function convertAnonToAuthenticated(
-  supabase: SupabaseClient,
+  supabase: AppSupabaseClient,
   email: string,
   password: string,
 ) {

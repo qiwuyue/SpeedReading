@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import type { Database } from "@/lib/supabase/database.types";
 
 export async function GET(request: Request): Promise<Response> {
   const authHeader = request.headers.get("authorization");
@@ -21,7 +22,7 @@ export async function GET(request: Request): Promise<Response> {
   );
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "";
 
-  const supabase = createClient(supabaseUrl, supabaseKey, {
+  const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
     global: { headers: { Authorization: `Bearer ${token}` } },
     auth: { persistSession: false, autoRefreshToken: false },
   });
@@ -37,10 +38,18 @@ export async function GET(request: Request): Promise<Response> {
   if (metaError || !fileMeta) {
     return NextResponse.json({ error: "File not found" }, { status: 404 });
   }
+
+  if (!fileMeta.storage_path) {
+    return NextResponse.json(
+      { error: "File storage path is missing" },
+      { status: 400 },
+    );
+  }
+
   // Download from Supabase Storage
   let fileBytes: ArrayBuffer | null = null;
   let fileError: string | null = null;
-  const original_filename: string = fileMeta.original_filename;
+  const originalFilename = fileMeta.original_filename || "document.pdf";
 
   try {
     const { data: fileData, error: downloadError } = await supabase.storage
@@ -70,7 +79,7 @@ export async function GET(request: Request): Promise<Response> {
   return new NextResponse(fileBytes, {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename=${original_filename || "document.pdf"}`,
+      "Content-Disposition": `attachment; filename=${originalFilename}`,
     },
   });
 }

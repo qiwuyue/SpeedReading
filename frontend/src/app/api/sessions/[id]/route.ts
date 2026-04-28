@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import type { Database } from "@/lib/supabase/database.types";
 
 export const runtime = "edge";
 
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest, { params }: GetSessionParams) {
   );
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "";
 
-  const supabase = createClient(supabaseUrl, supabaseKey, {
+  const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
     global: { headers: { Authorization: `Bearer ${token}` } },
     auth: { persistSession: false, autoRefreshToken: false },
   });
@@ -99,7 +100,7 @@ export async function PATCH(req: NextRequest, { params }: GetSessionParams) {
   );
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "";
 
-  const supabase = createClient(supabaseUrl, supabaseKey, {
+  const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
     global: { headers: { Authorization: `Bearer ${token}` } },
     auth: { persistSession: false, autoRefreshToken: false },
   });
