@@ -14,7 +14,7 @@ const nextConfig: NextConfig = {
       fs: false,
     };
     config.plugins.push(
-      new webpack.NormalModuleReplacementPlugin(/^node:/, (resource: { request: string }) => {
+      new webpack.NormalModuleReplacementPlugin(/^node:/, (resource) => {
         resource.request = resource.request.replace(/^node:/, "");
       }),
     );

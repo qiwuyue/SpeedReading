@@ -1,6 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
-import type { Database } from "@/lib/supabase/database.types";
 
 export const runtime = "edge";
 
@@ -25,7 +24,7 @@ export async function GET(req: NextRequest, { params }: GetSessionParams) {
   );
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "";
 
-  const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
+  const supabase = createClient(supabaseUrl, supabaseKey, {
     global: { headers: { Authorization: `Bearer ${token}` } },
     auth: { persistSession: false, autoRefreshToken: false },
   });
@@ -44,7 +43,7 @@ export async function GET(req: NextRequest, { params }: GetSessionParams) {
     // Fetch session by ID and verify it belongs to the user
     const { data: session, error: sessionError } = await supabase
       .from("reading_sessions")
-      .select("id, user_id, document_id, target_wpm, created_at, completed")
+      .select("id, user_id, document_id, created_at, completed")
       .eq("id", sessionId)
       .eq("user_id", user.id)
       .single();
@@ -58,7 +57,6 @@ export async function GET(req: NextRequest, { params }: GetSessionParams) {
         id: session.id,
         user_id: session.user_id,
         file_id: session.document_id,
-        target_wpm: session.target_wpm,
         created_at: session.created_at,
         completed: session.completed,
       },
@@ -100,7 +98,7 @@ export async function PATCH(req: NextRequest, { params }: GetSessionParams) {
   );
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "";
 
-  const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
+  const supabase = createClient(supabaseUrl, supabaseKey, {
     global: { headers: { Authorization: `Bearer ${token}` } },
     auth: { persistSession: false, autoRefreshToken: false },
   });

@@ -77,10 +77,6 @@ type DocumentRow = {
   original_filename: string | null;
 };
 
-type RecentDocumentWithSort = RecentDocument & {
-  lastReadAt: string | null;
-};
-
 const EMPTY_DASHBOARD_STATS: DashboardStat[] = [
   { label: 'Total sessions', value: '0', detail: '0 this week' },
   { label: 'Weekly reading', value: '0 words', detail: 'this week' },
@@ -119,10 +115,7 @@ const getDateKey = (value: string | null) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
 
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return date.toISOString().slice(0, 10);
 };
 
 const getRollingWeekStart = () => {
@@ -136,11 +129,8 @@ const getRollingWeekStart = () => {
 // If the user has not read yet today, yesterday can still anchor the streak;
 // this avoids resetting a valid streak to 0 at midnight before today's read.
 const buildCurrentStreak = (sessions: ReadingSessionAnalyticsRow[]) => {
-  const activeSessions = sessions.filter(
-    (session) => session.completed || (session.words_read ?? 0) > 0,
-  );
   const activeDays = new Set(
-    activeSessions
+    sessions
       .map((session) => getDateKey(session.created_at))
       .filter((dateKey): dateKey is string => Boolean(dateKey)),
   );
@@ -148,21 +138,17 @@ const buildCurrentStreak = (sessions: ReadingSessionAnalyticsRow[]) => {
   today.setHours(0, 0, 0, 0);
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
-  const todayKey = getDateKey(today.toISOString());
-  const yesterdayKey = getDateKey(yesterday.toISOString());
+  const todayKey = today.toISOString().slice(0, 10);
+  const yesterdayKey = yesterday.toISOString().slice(0, 10);
 
-  if (
-    !todayKey ||
-    !yesterdayKey ||
-    (!activeDays.has(todayKey) && !activeDays.has(yesterdayKey))
-  ) {
+  if (!activeDays.has(todayKey) && !activeDays.has(yesterdayKey)) {
     return 0;
   }
 
   let streak = 0;
   const cursor = activeDays.has(todayKey) ? today : yesterday;
 
-  while (activeDays.has(getDateKey(cursor.toISOString()) ?? '')) {
+  while (activeDays.has(cursor.toISOString().slice(0, 10))) {
     streak += 1;
     cursor.setDate(cursor.getDate() - 1);
   }
@@ -364,77 +350,72 @@ export default function DashboardPage() {
         throw new Error(userError?.message ?? 'Unable to load current user.');
       }
 
-      const { data: documents, error: documentsError } = await supabase
-        .from('documents')
-        .select('id, original_filename')
-        .eq('user_id', currentUser.id)
-        .limit(20);
-
-      if (documentsError) {
-        throw new Error(documentsError.message);
-      }
-
-      const documentRows = (documents ?? []) as DocumentRow[];
-      const documentIds = documentRows.map((document) => document.id);
-
-      if (!documentIds.length) {
-        setRecentDocuments([]);
-        return;
-      }
-
       const { data: sessions, error: sessionsError } = await supabase
         .from('reading_sessions')
         .select(
           'id, document_id, words_read, achieved_wpm, target_wpm, completed, created_at',
         )
         .eq('user_id', currentUser.id)
-        .in('document_id', documentIds)
-        .order('created_at', { ascending: false });
+        .not('document_id', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(8);
 
       if (sessionsError) {
         throw new Error(sessionsError.message);
       }
 
       const sessionRows = (sessions ?? []) as RecentSessionRow[];
+      const documentIds = Array.from(
+        new Set(
+          sessionRows
+            .map((session) => session.document_id)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      );
+
+      if (!documentIds.length) {
+        setRecentDocuments([]);
+        return;
+      }
+
+      const { data: documents, error: documentsError } = await supabase
+        .from('documents')
+        .select('id, original_filename')
+        .in('id', documentIds);
+
+      if (documentsError) {
+        throw new Error(documentsError.message);
+      }
+
+      const documentsById = new Map(
+        ((documents ?? []) as DocumentRow[]).map((document) => [
+          document.id,
+          document,
+        ]),
+      );
 
       const latestSessionsByDocumentId = new Map<string, RecentSessionRow>();
       sessionRows.forEach((session) => {
-        if (!session.document_id || latestSessionsByDocumentId.has(session.document_id)) {
+        if (
+          !session.document_id ||
+          latestSessionsByDocumentId.has(session.document_id)
+        ) {
           return;
         }
 
         latestSessionsByDocumentId.set(session.document_id, session);
       });
 
-      const recentDocuments = documentRows.map<RecentDocumentWithSort>(
-        (document) => {
-          const latestSession = latestSessionsByDocumentId.get(document.id);
-
-          return {
-            documentId: document.id,
-            sessionId: latestSession?.id ?? '',
-            title: document.original_filename ?? 'Untitled PDF',
-            progress: latestSession
-              ? formatRecentProgress(latestSession)
-              : 'Ready to read',
-            pace: latestSession ? formatRecentPace(latestSession) : 'Not started',
-            lastReadAt: latestSession?.created_at ?? null,
-          };
-        },
-      );
-
       setRecentDocuments(
-        recentDocuments
-          .sort((a, b) => {
-            if (!a.lastReadAt && !b.lastReadAt) return 0;
-            if (!a.lastReadAt) return 1;
-            if (!b.lastReadAt) return -1;
-            return (
-              new Date(b.lastReadAt).getTime() -
-              new Date(a.lastReadAt).getTime()
-            );
-          })
-          .slice(0, 8),
+        Array.from(latestSessionsByDocumentId.values()).map((session) => ({
+          documentId: session.document_id as string,
+          sessionId: session.id,
+          title:
+            documentsById.get(session.document_id as string)
+              ?.original_filename ?? 'Untitled PDF',
+          progress: formatRecentProgress(session),
+          pace: formatRecentPace(session),
+        })),
       );
     } catch (error) {
       const message =
