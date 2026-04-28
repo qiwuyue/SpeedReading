@@ -62,7 +62,16 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (metaError || !fileMeta) {
+      console.error('File metadata lookup failed:', metaError);
       return NextResponse.json({ error: 'File not found' }, { status: 404 });
+    }
+
+    if (!fileMeta.storage_path) {
+      console.error('File metadata is missing storage_path:', fileMeta.id);
+      return NextResponse.json(
+        { error: 'File storage path is missing' },
+        { status: 400 },
+      );
     }
 
     // Create a signed URL and fetch raw binary directly
@@ -73,16 +82,19 @@ export async function POST(req: NextRequest) {
         .createSignedUrl(fileMeta.storage_path, 60);
 
     if (signedUrlError || !signedUrlData?.signedUrl) {
+      console.error('Signed URL creation failed:', signedUrlError);
       return NextResponse.json(
-        { error: 'Failed to create signed URL' },
+        { error: signedUrlError?.message ?? 'Failed to create signed URL' },
         { status: 500 },
       );
     }
 
     const rawResponse = await fetch(signedUrlData.signedUrl);
     if (!rawResponse.ok) {
+      const storageError = await rawResponse.text().catch(() => '');
+      console.error('Storage file fetch failed:', storageError);
       return NextResponse.json(
-        { error: 'Failed to fetch file from storage' },
+        { error: storageError || 'Failed to fetch file from storage' },
         { status: 500 },
       );
     }
@@ -115,7 +127,7 @@ export async function POST(req: NextRequest) {
       const backendError = await backendResponse.text();
       console.error('Backend error:', backendError);
       return NextResponse.json(
-        { error: backendError },
+        { error: backendError || 'Backend failed to extract PDF text' },
         { status: backendResponse.status },
       );
     }
@@ -219,6 +231,9 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error('Error in /api/ai:', error);
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Server error' },
+      { status: 500 },
+    );
   }
 }

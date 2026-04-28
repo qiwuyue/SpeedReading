@@ -72,22 +72,27 @@ export default function SessionPage() {
         return;
       }
       const page = await parsePageNumbers(pendingFile)
+      const formData = new FormData();
+      formData.append(
+        "file",
+        new Blob([pendingFile], { type: "application/pdf" }),
+        pendingFileName,
+      );
+      formData.append("documentName", pendingFileName);
+      formData.append("pagesLength", String(page));
+
       // Call the sessions API to create a new session
       const response = await fetch("/api/sessions", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          documentName: pendingFileName,
-          file: pendingFile,
-          pagesLength: page, // Placeholder value, replace with actual page count if available
-        }),
+        body: formData,
       });
 
       if (!response.ok) {
-        throw new Error("Failed to create session");
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error ?? "Failed to create session");
       }
 
       const { sessionId } = await response.json();

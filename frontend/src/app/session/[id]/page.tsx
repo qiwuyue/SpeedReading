@@ -32,6 +32,8 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
   const [quizScore, setQuizScore] = useState<number | null>(null);
   const sessionEndedRef = useRef(false);
 
+  const isDotMode = profile?.focus_mode === 'dot';
+  const currentWord = words[currentWordIndex] ?? '';
   const wordsRead = words.length ? currentWordIndex + 1 : 0;
   const achievedWpm = useMemo(() => {
     if (!durationSeconds || !wordsRead) return null;
@@ -158,12 +160,17 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
         });
 
         if (!response.ok) {
-          setError(
-            'AI service is temporarily unavailable. Please try again later.',
-          );
+          const errorBody = (await response.json().catch(() => null)) as {
+            error?: unknown;
+          } | null;
+          const message =
+            typeof errorBody?.error === 'string'
+              ? errorBody.error
+              : 'AI service is temporarily unavailable. Please try again later.';
+
+          setError(message);
           showToast({
-            message:
-              'AI service is temporarily unavailable. Please try again later.',
+            message,
             variant: 'error',
           });
           return;
@@ -205,6 +212,11 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
             // skip malformed lines
           }
         }
+
+        if (!allWords.length) {
+          throw new Error('No readable text was returned for this document.');
+        }
+
         setWords(allWords);
         setQuizQuestions(allQuestions);
       } catch (err) {
@@ -451,9 +463,13 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
       {/* Main Reading Area */}
       <main className="mx-auto max-w-4xl px-4 py-12 sm:px-6">
         {showQuiz ? (
-          <div className="rounded-3xl border border-white/8 bg-white px-6 py-6 text-zinc-900 shadow-2xl shadow-black/30 sm:px-8">
+          <div className="relative overflow-hidden rounded-3xl border border-white/8 bg-[rgba(13,13,18,0.9)] px-6 py-6 shadow-2xl shadow-black/30 sm:px-8">
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -right-20 -top-28 h-72 w-72 rounded-full bg-amber-500/15 blur-3xl"
+            />
             {quizScore === null ? (
-              <>
+              <div className="relative">
                 <QuizScreen
                   chunkTitle="Reading session"
                   wpm={achievedWpm ?? wpm}
@@ -461,23 +477,23 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
                   onSubmit={submitComprehensionCheck}
                 />
                 {quizSubmitting ? (
-                  <p className="mt-3 text-sm text-gray-500">
+                  <p className="mt-3 text-sm text-zinc-400">
                     Saving comprehension check...
                   </p>
                 ) : null}
-              </>
+              </div>
             ) : (
-              <div className="text-center">
-                <h2 className="text-2xl font-bold text-gray-950">
+              <div className="relative text-center">
+                <h2 className="text-2xl font-bold text-white">
                   Comprehension saved
                 </h2>
-                <p className="mt-3 text-lg font-semibold text-blue-700">
+                <p className="mt-3 text-lg font-semibold text-amber-300">
                   Score: {quizScore}%
                 </p>
                 <button
                   type="button"
                   onClick={handleExitSession}
-                  className="mt-6 rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+                  className="mt-6 rounded-lg bg-linear-to-r from-amber-500 to-orange-600 px-5 py-2 text-sm font-semibold text-white transition-all hover:from-amber-400 hover:to-orange-500"
                 >
                   Back to Dashboard
                 </button>
@@ -536,22 +552,33 @@ export default function ReadingSessionPage({ params }: SessionPageProps) {
           {words.length > 0 ? (
             <>
               <div className="relative mb-12 min-h-32">
-                <div className="flex flex-wrap gap-2 text-center text-3xl font-bold leading-relaxed sm:text-4xl">
-                  {words.map((word, index) => (
-                    <span
-                      key={index}
-                      className={`transition-all duration-200 ${
-                        index === currentWordIndex
-                          ? 'text-amber-400 scale-110'
-                          : index < currentWordIndex
-                          ? 'text-zinc-500'
-                          : 'text-white/60'
-                      }`}
-                    >
-                      {word}
-                    </span>
-                  ))}
-                </div>
+                {isDotMode ? (
+                  <div className="flex min-h-44 items-center justify-center">
+                    <div className="flex max-w-full flex-col items-center gap-5 px-6 text-center">
+                      <span className="h-2.5 w-2.5 rounded-full bg-amber-400 shadow-lg shadow-amber-500/40" />
+                      <span className="block max-w-full break-words text-5xl font-bold leading-tight text-white sm:text-7xl">
+                        {currentWord}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2 text-center text-3xl font-bold leading-relaxed sm:text-4xl">
+                    {words.map((word, index) => (
+                      <span
+                        key={index}
+                        className={`transition-all duration-200 ${
+                          index === currentWordIndex
+                            ? 'text-amber-400 scale-110'
+                            : index < currentWordIndex
+                            ? 'text-zinc-500'
+                            : 'text-white/60'
+                        }`}
+                      >
+                        {word}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Controls */}

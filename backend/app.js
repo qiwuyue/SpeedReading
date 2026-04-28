@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 const dotenv = require('dotenv');
-const pdfParse = require('pdf-parse');
+const { PDFParse } = require('pdf-parse');
 dotenv.config();
 
 const app = express();
@@ -49,11 +49,17 @@ function isPdfBytes(inputBuffer) {
 }
 
 async function extractPdfText(pdfBuffer) {
-  const data = await pdfParse(pdfBuffer);
-  console.log(
-    `Pages: ${data.numpages}, extracted text length: ${data.text.length}`,
-  );
-  return data.text || '';
+  const parser = new PDFParse({ data: pdfBuffer });
+
+  try {
+    const result = await parser.getText({ pageJoiner: '\n\n' });
+    console.log(
+      `Pages: ${result.total}, extracted text length: ${result.text.length}`,
+    );
+    return result.text || '';
+  } finally {
+    await parser.destroy();
+  }
 }
 async function requireSupabaseAuth(req, res, next) {
   if (!supabase) {
@@ -98,6 +104,12 @@ app.use((req, res, next) => {
 app.get('/', (req, res) => {
   res.json({
     message: 'SpeedReading backend is running',
+    status: 'ok',
+  });
+});
+
+app.get('/health', (req, res) => {
+  res.json({
     status: 'ok',
   });
 });

@@ -56,7 +56,7 @@ type DashboardStat = {
 
 type RecentDocument = {
   documentId: string;
-  sessionId: string;
+  sessionId: string | null;
   title: string;
   progress: string;
   pace: string;
@@ -75,6 +75,7 @@ type RecentSessionRow = {
 type DocumentRow = {
   id: string;
   original_filename: string | null;
+  created_at: string | null;
 };
 
 const EMPTY_DASHBOARD_STATS: DashboardStat[] = [
@@ -350,49 +351,39 @@ export default function DashboardPage() {
         throw new Error(userError?.message ?? 'Unable to load current user.');
       }
 
-      const { data: sessions, error: sessionsError } = await supabase
-        .from('reading_sessions')
-        .select(
-          'id, document_id, words_read, achieved_wpm, target_wpm, completed, created_at',
-        )
+      const { data: documents, error: documentsError } = await supabase
+        .from('documents')
+        .select('id, original_filename, created_at')
         .eq('user_id', currentUser.id)
-        .not('document_id', 'is', null)
         .order('created_at', { ascending: false })
         .limit(8);
 
-      if (sessionsError) {
-        throw new Error(sessionsError.message);
+      if (documentsError) {
+        throw new Error(documentsError.message);
       }
 
-      const sessionRows = (sessions ?? []) as RecentSessionRow[];
-      const documentIds = Array.from(
-        new Set(
-          sessionRows
-            .map((session) => session.document_id)
-            .filter((id): id is string => Boolean(id)),
-        ),
-      );
+      const documentRows = (documents ?? []) as DocumentRow[];
+      const documentIds = documentRows.map((document) => document.id);
 
       if (!documentIds.length) {
         setRecentDocuments([]);
         return;
       }
 
-      const { data: documents, error: documentsError } = await supabase
-        .from('documents')
-        .select('id, original_filename')
-        .in('id', documentIds);
+      const { data: sessions, error: sessionsError } = await supabase
+        .from('reading_sessions')
+        .select(
+          'id, document_id, words_read, achieved_wpm, target_wpm, completed, created_at',
+        )
+        .eq('user_id', currentUser.id)
+        .in('document_id', documentIds)
+        .order('created_at', { ascending: false });
 
-      if (documentsError) {
-        throw new Error(documentsError.message);
+      if (sessionsError) {
+        throw new Error(sessionsError.message);
       }
 
-      const documentsById = new Map(
-        ((documents ?? []) as DocumentRow[]).map((document) => [
-          document.id,
-          document,
-        ]),
-      );
+      const sessionRows = (sessions ?? []) as RecentSessionRow[];
 
       const latestSessionsByDocumentId = new Map<string, RecentSessionRow>();
       sessionRows.forEach((session) => {
@@ -407,15 +398,19 @@ export default function DashboardPage() {
       });
 
       setRecentDocuments(
-        Array.from(latestSessionsByDocumentId.values()).map((session) => ({
-          documentId: session.document_id as string,
-          sessionId: session.id,
-          title:
-            documentsById.get(session.document_id as string)
-              ?.original_filename ?? 'Untitled PDF',
-          progress: formatRecentProgress(session),
-          pace: formatRecentPace(session),
-        })),
+        documentRows.map((document) => {
+          const latestSession = latestSessionsByDocumentId.get(document.id);
+
+          return {
+            documentId: document.id,
+            sessionId: latestSession?.id ?? null,
+            title: document.original_filename ?? 'Untitled PDF',
+            progress: latestSession
+              ? formatRecentProgress(latestSession)
+              : 'Ready to read',
+            pace: latestSession ? formatRecentPace(latestSession) : 'Not started',
+          };
+        }),
       );
     } catch (error) {
       const message =
@@ -1193,7 +1188,7 @@ export default function DashboardPage() {
                   {recentDocumentsLoading
                     ? 'Loading your uploaded PDFs...'
                     : recentDocuments.length === 0
-                    ? 'Start your first reading session to see documents here.'
+                    ? 'Upload a PDF to see documents here.'
                     : 'Continue from your uploaded PDFs.'}
                 </p>
               </div>
@@ -1224,7 +1219,7 @@ export default function DashboardPage() {
                   {recentDocuments.map(
                     ({ documentId, sessionId, title, progress, pace }) => (
                       <div
-                        key={sessionId}
+                        key={sessionId ?? documentId}
                         className="flex flex-col gap-3 rounded-xl border border-white/6 bg-white/3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
                       >
                         <div className="min-w-0">
